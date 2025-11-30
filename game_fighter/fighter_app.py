@@ -3,11 +3,7 @@ import os
 from kivy.app import App
 from kivy.core.window import Window
 
-try:
-    from .game_widget import FighterGame
-except ImportError:
-    from game_widget import FighterGame
-
+from game_fighter.game_widget import FighterGame
 
 class FighterApp(App):
     def build(self):

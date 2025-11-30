@@ -4,16 +4,16 @@ package.name = retrofighter
 package.domain = org.retro.fighter
 
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,json,wav,ogg,ttf
-source.include_patterns = **
-source.exclude_patterns = sdkmanager
+source.include_exts = py,png,kv,atlas,json,wav,ogg,ttf
+
 
 version = 1.0.0
 
-requirements = python3,kivy,kivy,kivy==2.2.1,pillow
+requirements = python3,kivy==2.2.1,pillow
 
 # Architecture: Android only runs Python 3.11 on 64-bit
 android.archs = arm64-v8a
+android.accept_sdk_license = True
 
 orientation = landscape
 fullscreen = 1
@@ -60,8 +60,3 @@ warn_on_root = 1
 [app.android]
 android.python_debuggable = False
 
-
-[android]
-android.sdk_path = /Users/guimachado/.buildozer/android/platform/android-sdk
-android.ndk_path = /Users/guimachado/.buildozer/android/platform/android-ndk-r25b
-source.exclude_patterns = sdkmanager

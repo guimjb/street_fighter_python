@@ -2,8 +2,10 @@ import json
 import os
 import random
 
-from constants import HITBOX_H, HITBOX_W, HURTBOX_H, HURTBOX_W, SPRITE_SIZE, SPRITE_SCALE, SCALE_FACTOR, STAGE_MARGIN, PHYSICS_SCALE
-from sprite_anim import SpriteAnim
+from game_fighter import constants 
+from game_fighter import sprite_anim
+from game_fighter.constants import PHYSICS_SCALE, SCALE_FACTOR, SPRITE_SCALE, SPRITE_SIZE, STAGE_MARGIN
+from game_fighter.sprite_anim import SpriteAnim
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 FRAME_CACHE = None

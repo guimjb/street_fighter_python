@@ -9,12 +9,8 @@ from kivy.graphics import Color, Rectangle, InstructionGroup, Ellipse, PushMatri
 from kivy.graphics.texture import Texture
 from kivy.uix.widget import Widget
 
-try:
-    from .constants import SPRITE_SIZE, HURTBOX_W, HURTBOX_H, SCALE_FACTOR, SPRITE_SCALE, PHYSICS_SCALE
-    from .fighter import Fighter
-except ImportError:
-    from constants import SPRITE_SIZE, HURTBOX_W, HURTBOX_H, SCALE_FACTOR, SPRITE_SCALE, PHYSICS_SCALE
-    from fighter import Fighter
+from game_fighter.constants import SPRITE_SIZE, HURTBOX_W, HURTBOX_H, SCALE_FACTOR, SPRITE_SCALE, PHYSICS_SCALE
+from game_fighter.fighter import Fighter
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
@@ -1442,7 +1438,7 @@ class FighterGame(Widget):
 
     def _start_positions(self):
         """Place fighters at ~15% and ~85% of the screen width."""
-        from constants import STAGE_MARGIN
+        from game_fighter.constants import STAGE_MARGIN
 
         win_w = self.stage_width
         scale_ratio = self._compute_sprite_scale() / float(SPRITE_SCALE)
