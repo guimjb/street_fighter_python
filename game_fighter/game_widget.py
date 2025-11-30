@@ -39,33 +39,33 @@ def keyname_from_keyup(keycode: int) -> str:
 
 
 def load_ryu_assets():
-    folder = os.path.join(ASSETS_DIR, "Ryu Sprites Project")
+    folder = os.path.join(ASSETS_DIR, "ryu_sprites_project")
     return {
         "idle": os.path.join(folder, "Idle.png"),
         "run": os.path.join(folder, "Walk.png"),
         "jump": os.path.join(folder, "Jump.png"),
-        "attack": os.path.join(folder, "Right Punch.png"),
+        "attack": os.path.join(folder, "right_punch.png"),
         "hit": os.path.join(folder, "Hit.png"),
         "defeat": os.path.join(folder, "Defeat.png"),
         "victory": [
-            os.path.join(folder, "Victory 1.png"),
-            os.path.join(folder, "Victory 2.png"),
+            os.path.join(folder, "victory_1.png"),
+            os.path.join(folder, "victory_2.png"),
         ],
     }
 
 
 def load_ken_assets():
-    folder = os.path.join(ASSETS_DIR, "Ken Sprites Project")
+    folder = os.path.join(ASSETS_DIR, "ken_sprites_project")
     return {
-        "idle": os.path.join(folder, "Idle Ken.png"),
+        "idle": os.path.join(folder, "idle_ken.png"),
         "run": os.path.join(folder, "Walking_Ken.png"),
-        "jump": os.path.join(folder, "Ken Jump.png"),
-        "attack": os.path.join(folder, "Ken Right Punch.png"),
-        "hit": os.path.join(folder, "Ken Hit.png"),
-        "defeat": os.path.join(folder, "Ken Defeat.png"),
+        "jump": os.path.join(folder, "ken_jump.png"),
+        "attack": os.path.join(folder, "ken_right_punch.png"),
+        "hit": os.path.join(folder, "ken_hit.png"),
+        "defeat": os.path.join(folder, "ken_defeat.png"),
         "victory": [
-            os.path.join(folder, "Ken Victory 1.png"),
-            os.path.join(folder, "Ken Victory 2.png"),
+            os.path.join(folder, "ken_victory_1.png"),
+            os.path.join(folder, "ken_victory_2.png"),
         ],
     }
 
@@ -96,6 +96,8 @@ class FighterGame(Widget):
         self.floor_base_h = None
         font_candidate = os.path.join(ASSETS_DIR, "Fonts", "StreetFont.ttf")
         self.font_path = font_candidate if os.path.exists(font_candidate) else None
+        self.hp_back_tex = self._load_texture(os.path.join(ASSETS_DIR, "Menu", "healthbar_back.png"))
+        self.hp_front_tex = self._load_texture(os.path.join(ASSETS_DIR, "Menu", "healthbar_front.png"))
         self.round_timer = 60
         self._timer_accum = 0.0
 
@@ -107,8 +109,8 @@ class FighterGame(Widget):
         self.max_wins = 2
         # UI / selection
         self.character_options = [
-            {"name": "Ryu", "loader": load_ryu_assets, "portrait": os.path.join(ASSETS_DIR, "Ryu Sprites Project", "RyuPortrait.png")},
-            {"name": "Ken", "loader": load_ken_assets, "portrait": os.path.join(ASSETS_DIR, "Ken Sprites Project", "Ken Portrait.png")},
+            {"name": "Ryu", "loader": load_ryu_assets, "portrait": os.path.join(ASSETS_DIR, "ryu_sprites_project", "RyuPortrait.png")},
+            {"name": "Ken", "loader": load_ken_assets, "portrait": os.path.join(ASSETS_DIR, "ken_sprites_project", "ken_portrait.png")},
         ]
         self.base_width = 1920
         self.base_height = 1080
@@ -261,8 +263,8 @@ class FighterGame(Widget):
 
         layers = []
         if key == "boat":
-            folder = os.path.join(ASSETS_DIR, "Boat Stage Project")
-            floor_path = os.path.join(folder, "Boat Stage Floor.png")
+            folder = os.path.join(ASSETS_DIR, "boat_stage_project")
+            floor_path = os.path.join(folder, "boat_stage_floor.png")
             if os.path.exists(floor_path):
                 tex = CoreImage(floor_path).texture
                 try:
@@ -277,8 +279,8 @@ class FighterGame(Widget):
                 self.floor_y = self._reference_floor_y()
             # Backgrounds, align left; BG2 sits slightly above the floor
             files = [
-                "Boat Stage Background.png",  # far
-                "Boat Stage Background 2.png",  # mid
+                "boat_stage_background.png",  # far
+                "boat_stage_background_2.png",  # mid
             ]
             files = [os.path.join(folder, f) for f in files if os.path.exists(os.path.join(folder, f))]
             for i, fpath in enumerate(files):
@@ -314,12 +316,12 @@ class FighterGame(Widget):
                 )
 
         elif key == "military":
-            folder = os.path.join(ASSETS_DIR, "Military Stage Project")
-            bg_path = os.path.join(folder, "Stage Military Background.png")
+            folder = os.path.join(ASSETS_DIR, "military_stage_project")
+            bg_path = os.path.join(folder, "stage_military_background.png")
             if os.path.exists(bg_path):
                 layers.append(self._make_layer(bg_path, 0, 1))
 
-            floor_path = os.path.join(folder, "Stage Military Floor.png")
+            floor_path = os.path.join(folder, "stage_military_floor.png")
             if os.path.exists(floor_path):
                 tex = CoreImage(floor_path).texture
                 try:
@@ -545,22 +547,39 @@ class FighterGame(Widget):
     # --------------------------------------------------------
     def _build_hud(self):
         self.hud_group.clear()
-        self.bar_height = 80
-        # Base bars (red)
-        self.hud_group.add(Color(0.65, 0.1, 0.1, 1))
-        self.hp1_base = Rectangle()
-        self.hud_group.add(self.hp1_base)
-        self.hud_group.add(Color(0.65, 0.1, 0.1, 1))
-        self.hp2_base = Rectangle()
-        self.hud_group.add(self.hp2_base)
+        use_textures = self.hp_back_tex is not None and self.hp_front_tex is not None
+        self.bar_height = 80  # fallback height if textures are missing
+        # Base bars (background)
+        if use_textures:
+            self.hud_group.add(Color(1, 1, 1, 1))
+            self.hp1_base = Rectangle(texture=self.hp_back_tex)
+            self.hud_group.add(self.hp1_base)
+            self.hud_group.add(Color(1, 1, 1, 1))
+            self.hp2_base = Rectangle(texture=self.hp_back_tex)
+            self.hud_group.add(self.hp2_base)
+        else:
+            self.hud_group.add(Color(0.65, 0.1, 0.1, 1))
+            self.hp1_base = Rectangle()
+            self.hud_group.add(self.hp1_base)
+            self.hud_group.add(Color(0.65, 0.1, 0.1, 1))
+            self.hp2_base = Rectangle()
+            self.hud_group.add(self.hp2_base)
 
-        # Foreground bars (yellow)
-        self.hud_group.add(Color(0.98, 0.9, 0.1, 1))
-        self.hp1_bar = Rectangle()
-        self.hud_group.add(self.hp1_bar)
-        self.hud_group.add(Color(0.98, 0.9, 0.1, 1))
-        self.hp2_bar = Rectangle()
-        self.hud_group.add(self.hp2_bar)
+        # Foreground bars (fill)
+        if use_textures:
+            self.hud_group.add(Color(1, 1, 1, 1))
+            self.hp1_bar = Rectangle(texture=self.hp_front_tex)
+            self.hud_group.add(self.hp1_bar)
+            self.hud_group.add(Color(1, 1, 1, 1))
+            self.hp2_bar = Rectangle(texture=self.hp_front_tex)
+            self.hud_group.add(self.hp2_bar)
+        else:
+            self.hud_group.add(Color(0.98, 0.9, 0.1, 1))
+            self.hp1_bar = Rectangle()
+            self.hud_group.add(self.hp1_bar)
+            self.hud_group.add(Color(0.98, 0.9, 0.1, 1))
+            self.hp2_bar = Rectangle()
+            self.hud_group.add(self.hp2_bar)
 
         # Timer
         self.timer_color = Color(1, 1, 1, 1)
@@ -611,10 +630,13 @@ class FighterGame(Widget):
         if not self.hp1_base or not self.width:
             return
         center_x = self.width / 2
-        top_margin = self.height - self.bar_height * 1.5  # leave 50% bar height offset from top
         gap = max(60, self.width * 0.05)
         half_w = min(self.width * 0.36 * 1.5, 760 * 1.5)  # 50% wider bars
-        bar_h = self.bar_height
+        bar_h = self._health_bar_height(half_w)
+        self.bar_height = bar_h
+        top_margin = self.height - bar_h * 1.5  # leave 50% bar height offset from top
+        ratio_p1 = max(0.0, min(1.0, self.p1.hp / self.p1.max_hp))
+        ratio_p2 = max(0.0, min(1.0, self.p2.hp / self.p2.max_hp))
 
         # Bases anchored to center gap
         self.hp1_base.pos = (center_x - gap / 2 - half_w, top_margin)
@@ -623,12 +645,24 @@ class FighterGame(Widget):
         self.hp2_base.size = (half_w, bar_h)
 
         # Foreground bars shrink toward center
-        p1_w = half_w * (self.p1.hp / self.p1.max_hp)
-        p2_w = half_w * (self.p2.hp / self.p2.max_hp)
+        p1_w = half_w * ratio_p1
+        p2_w = half_w * ratio_p2
         self.hp1_bar.pos = (center_x - gap / 2 - p1_w, top_margin)
         self.hp1_bar.size = (p1_w, bar_h)
         self.hp2_bar.pos = (center_x + gap / 2, top_margin)
         self.hp2_bar.size = (p2_w, bar_h)
+
+        if self.hp_back_tex:
+            self.hp1_base.texture = self.hp_back_tex
+            self.hp1_base.tex_coords = self._health_texcoords(self.hp_back_tex, 1.0, anchor="right")
+            self.hp2_base.texture = self.hp_back_tex
+            self.hp2_base.tex_coords = self._health_texcoords(self.hp_back_tex, 1.0, anchor="left")
+
+        if self.hp_front_tex:
+            self.hp1_bar.texture = self.hp_front_tex
+            self.hp1_bar.tex_coords = self._health_texcoords(self.hp_front_tex, ratio_p1, anchor="right")
+            self.hp2_bar.texture = self.hp_front_tex
+            self.hp2_bar.tex_coords = self._health_texcoords(self.hp_front_tex, ratio_p2, anchor="left")
 
         # Timer in the gap, centered vertically on the bar
         self._render_timer(top_margin, bar_h, gap)
@@ -707,11 +741,44 @@ class FighterGame(Widget):
         if not self.hp1_bar:
             return
         self._layout_hud()
+
+    def _health_bar_height(self, half_w):
+        if self.hp_back_tex:
+            aspect = self.hp_back_tex.size[1] / max(1.0, float(self.hp_back_tex.size[0]))
+            # Keep height in a readable range while preserving texture aspect ratio.
+            return max(32, min(self.height * 0.18, half_w * aspect))
+        return getattr(self, "bar_height", 80)
+
+    @staticmethod
+    def _health_texcoords(tex, ratio, anchor="left"):
+        ratio = max(0.0, min(1.0, ratio))
+        u0, v0 = tex.uvpos
+        us, vs = tex.uvsize
+        if anchor == "right":
+            u_start = u0 + us * (1.0 - ratio)
+            u_end = u0 + us
+        else:
+            u_start = u0
+            u_end = u0 + us * ratio
+        v_start = v0
+        v_end = v0 + vs
+        return (u_start, v_start, u_end, v_start, u_end, v_end, u_start, v_end)
     # --------------------------------------------------------
     # MENU / UI HELPERS
     # --------------------------------------------------------
     def _clear_ui(self):
         self.ui_group.clear()
+
+    def _load_texture(self, path):
+        if not path or not os.path.exists(path):
+            return None
+        tex = CoreImage(path).texture
+        try:
+            tex.mag_filter = "nearest"
+            tex.min_filter = "nearest"
+        except Exception:
+            pass
+        return tex
 
     def _label_kwargs(self, font_px):
         kwargs = {"font_size": font_px}
@@ -743,7 +810,7 @@ class FighterGame(Widget):
         self.ui_group.add(Rectangle(pos=(0, 0), size=(self.width, self.height)))
 
     def _draw_logo(self, y, max_w=None, max_h=None, scale=1.0):
-        logo_path = os.path.join(ASSETS_DIR, "menu", "Project Logo.png")
+        logo_path = os.path.join(ASSETS_DIR, "Menu", "project_logo.png")
         if not os.path.exists(logo_path):
             return None
         tex = CoreImage(logo_path).texture

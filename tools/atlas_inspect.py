@@ -4,7 +4,7 @@ and prints their bounding boxes so you can map UI pieces (e.g., health bars, fon
 without manually slicing the PNG.
 
 Usage:
-    python3 tools/atlas_inspect.py --image "assets/Text and Health Bar/HealthFont.png"
+    python3 tools/atlas_inspect.py --image "assets/text_and_health_bar/HealthFont.png"
 """
 
 from __future__ import annotations

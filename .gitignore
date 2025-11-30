@@ -1,3 +1,7 @@
 .venv/
 .vscode/
+.*/
 _tmp
+game_figther/__pycache__/
+bin/
+.buildozer/*.*

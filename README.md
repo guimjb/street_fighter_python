@@ -37,13 +37,13 @@ Arcade-style 2D fighter built with Kivy featuring character and stage select, sp
   - `constants.py` - Shared tuning values for sprite scale, physics scale, hitbox sizes, and stage margins.
   - `__init__.py` - Package marker.
 - `assets/` - Game art and UI.
-  - `Ryu Sprites Project/` - Ryu animation sheets (`Idle.png`, `Walk.png`, `Jump.png`, `Right Punch.png`, `Hit.png`, `Defeat.png`, `Victory 1/2.png`, `RyuPortrait.png`).
-  - `Ken Sprites Project/` - Ken animation sheets (idle/run/jump/punch/hit/defeat/victory) and portrait.
-  - `Boat Stage Project/` - Boat stage background layers and floor texture.
-  - `Military Stage Project/` - Military stage background and floor.
+  - `ryu_sprites_project/` - Ryu animation sheets (`Idle.png`, `Walk.png`, `Jump.png`, `right_punch.png`, `Hit.png`, `Defeat.png`, `victory_1/2.png`, `RyuPortrait.png`).
+  - `ken_sprites_project/` - Ken animation sheets (`idle_ken.png`, `Walking_Ken.png`, `ken_jump.png`, `ken_right_punch.png`, `ken_hit.png`, `ken_defeat.png`, `ken_victory_1/2.png`, `ken_portrait.png`).
+  - `boat_stage_project/` - Boat stage background layers and floor texture.
+  - `military_stage_project/` - Military stage background and floor.
   - `Menu/` - Project logo and fight button art for the main menu.
   - `Fonts/` - `StreetFont.ttf` used for HUD and banners.
-  - `Text and Health Bar/` - Atlas for UI elements and health bar.
+  - `text_and_health_bar/` - Atlas for UI elements and health bar.
 - `ryu_frames.json`, `ken_frames.json` - Generated frame metadata for slicing the Ryu and Ken sprite sheets; consumed by `fighter.py`.
 - `tools/` - Utility scripts.
   - `slice_sprites.py` - Auto-slice horizontal sprite sheets into frame rectangles and emit JSON metadata.

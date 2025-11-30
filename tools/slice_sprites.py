@@ -12,8 +12,8 @@ Outputs a JSON with entries per file:
 }
 
 Usage:
-    python3 tools/slice_sprites.py --folder "assets/Ryu Sprites Project" --out ryu_frames.json
-    python3 tools/slice_sprites.py --folder "assets/Ken Sprites Project" --out ken_frames.json
+    python3 tools/slice_sprites.py --folder "assets/ryu_sprites_project" --out ryu_frames.json
+    python3 tools/slice_sprites.py --folder "assets/ken_sprites_project" --out ken_frames.json
 """
 
 from __future__ import annotations
