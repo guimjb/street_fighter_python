@@ -9,7 +9,7 @@ source.include_patterns = assets/*, assets/**/*
 
 version = 1.0.0
 
-requirements = python3,kivy,kivy==2.2.1,pillow
+requirements = python3,kivy==2.2.1
 
 # Architecture: Android only runs Python 3.11 on 64-bit
 android.archs = arm64-v8a
@@ -47,6 +47,8 @@ p4a.extra_args = --disable-remote-debugging --no-compile-pymodule=_remote_debugg
 
 # No remote debugging module (fixes compile errors)
 p4a.branch = master
+local_recipes = recipes
+blacklist_recipes = jpeg
 
 
 
