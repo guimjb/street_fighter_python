@@ -5,12 +5,13 @@ from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
 from kivy.core.text import Label as CoreLabel
 from kivy.core.window import Window
-from kivy.graphics import Color, Rectangle, InstructionGroup, Ellipse, PushMatrix, PopMatrix, Scale, Translate
+from kivy.graphics import Color, Rectangle, InstructionGroup, Ellipse, PushMatrix, PopMatrix, Scale, Translate, Line
 from kivy.graphics.texture import Texture
 from kivy.uix.widget import Widget
 
 from game_fighter.constants import SPRITE_SIZE, HURTBOX_W, HURTBOX_H, SCALE_FACTOR, SPRITE_SCALE, PHYSICS_SCALE
 from game_fighter.fighter import Fighter
+from game_fighter.input_manager import InputManager
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
@@ -79,9 +80,19 @@ class FighterGame(Widget):
         # Stage bounds (fixed so resizing the window doesn't move fighters)
         w, _ = Window.size
         self.stage_width = w or 1280
+        # Controls
+        self.control_modes = ["keyboard", "touch"]
+        self.selected_control_mode_index = 0  # default to keyboard/controller
         # Input
-        self.held = set()
-        self.show_hitboxes = True  # Toggle debug overlays on/off
+        self.input = InputManager()
+        self.touch_actions = {}  # touch.id -> set(actions)
+        self._pending_jump = False
+        self._pending_attack = False
+        self.touch_group = InstructionGroup()
+        self.touch_button_boxes = {}
+        self._main_menu_play_rect = None
+        self._main_menu_control_rect = None
+        self.show_hitboxes = False  # Toggle debug overlays on/off (default hidden)
 
         # Physics
         self.gravity = -2200 * PHYSICS_SCALE
@@ -173,6 +184,10 @@ class FighterGame(Widget):
 
         Window.bind(on_key_down=self._on_key_down)
         Window.bind(on_key_up=self._on_key_up)
+        Window.bind(on_joy_axis=self._on_joy_axis)
+        Window.bind(on_joy_hat=self._on_joy_hat)
+        Window.bind(on_joy_button_down=self._on_joy_button_down)
+        Window.bind(on_joy_button_up=self._on_joy_button_up)
 
         Clock.schedule_interval(self.update, 1 / 60)
 
@@ -188,6 +203,7 @@ class FighterGame(Widget):
             self._show_banner("DEBUG MODE", seconds=0.6, font_px=48)
         else:
             self._enter_main_menu()
+        self._layout_touch_ui()
 
     # --------------------------------------------------------
     # LOAD CHARACTER SPRITES + CREATE P1/P2
@@ -462,6 +478,7 @@ class FighterGame(Widget):
         self._layout_bg_cover()
         self._sync_draw()
         self._render_current_ui()
+        self._layout_touch_ui()
 
     def _attach_after_layers(self):
         """Attach canvas.after layers in draw order so HUD/UI are not camera-transformed."""
@@ -471,6 +488,7 @@ class FighterGame(Widget):
             self.hurtbox_debug,  # world-space debug
             self.fx,  # world fx in world space
             self.transform_after,  # PopMatrix for camera/shake
+            self.touch_group,
             self.hud_group,  # HUD/UI after pop
             self.banner_group,
             self.ui_group,
@@ -519,6 +537,8 @@ class FighterGame(Widget):
 
     def _draw_debug_boxes(self):
         if not self.show_hitboxes:
+            self.hitbox_debug.clear()
+            self.hurtbox_debug.clear()
             return
 
         self.hitbox_debug.clear()
@@ -873,15 +893,36 @@ class FighterGame(Widget):
 
         self.ui_group.add(Color(0.85, 0.35, 0.25, 1))
         self.ui_group.add(Rectangle(pos=(btn_x, btn_y), size=(btn_w, btn_h)))
+        self._main_menu_play_rect = (btn_x, btn_y, btn_w, btn_h)
         # Play label centered in button
         play_tex = self._measure_label("Play", 64)
         lbl_x = btn_x + (btn_w - play_tex.width) / 2
         lbl_y = btn_y + (btn_h - play_tex.height) / 2
         self._draw_label("Play", lbl_x, lbl_y, font_px=64)
 
-        prompt_y = btn_y - max(self.height * 0.08, 70)
+        # Control mode selector
+        ctrl_w = min(self.width * 0.36, 560)
+        ctrl_h = max(90, btn_h * 0.7)
+        ctrl_x = (self.width - ctrl_w) / 2
+        ctrl_y = btn_y - max(self.height * 0.11, 90)
+        self._main_menu_control_rect = (ctrl_x, ctrl_y, ctrl_w, ctrl_h)
+        self.ui_group.add(Color(0.15, 0.15, 0.2, 0.8))
+        self.ui_group.add(Rectangle(pos=(ctrl_x, ctrl_y), size=(ctrl_w, ctrl_h)))
+        mode_label = "Keyboard / Controller" if self.control_mode == "keyboard" else "Touch"
+        mode_text = f"Controls: {mode_label}"
+        mode_tex = self._measure_label(mode_text, 52)
+        mode_x = ctrl_x + (ctrl_w - mode_tex.width) / 2
+        mode_y = ctrl_y + (ctrl_h - mode_tex.height) / 2
+        self._draw_label(mode_text, mode_x, mode_y, font_px=52)
+        hint_text = "Left/Right or tap to switch"
+        hint_tex = self._measure_label(hint_text, 32)
+        hint_x = ctrl_x + (ctrl_w - hint_tex.width) / 2
+        hint_y = ctrl_y - max(28, hint_tex.height + 10)
+        self._draw_label(hint_text, hint_x, hint_y, font_px=32, color=(1, 1, 1, 0.7))
+
+        prompt_y = hint_y - max(self.height * 0.05, 42)
         prompt_y = max(prompt_y, self.height * 0.05)
-        self._center_label("Press Enter to continue", prompt_y, font_px=52, color=(1, 1, 1, 0.8))
+        self._center_label("Press Enter or tap Play to continue", prompt_y, font_px=44, color=(1, 1, 1, 0.8))
 
     def _render_select_grid(self, title, options, selected_idx):
         self._clear_ui()
@@ -926,7 +967,7 @@ class FighterGame(Widget):
                 lbl_y = box_y + (box_size - label_tex.height) / 2
                 self._draw_label(opt["name"], lbl_x, lbl_y, font_px=56, color=(0, 0, 0, 0.9) if is_selected else (1, 1, 1, 0.9))
 
-        self._center_label("Use arrow keys to choose, Enter to confirm", self.height * 0.22, font_px=44, color=(1, 1, 1, 0.8))
+        self._center_label("Use arrow keys or tap to choose, Enter/tap again to confirm", self.height * 0.22, font_px=44, color=(1, 1, 1, 0.8))
 
     def _render_character_select(self):
         self._render_select_grid("Choose Your Fighter", self.character_options, self.selected_character_index)
@@ -944,11 +985,71 @@ class FighterGame(Widget):
         else:
             self._clear_ui()
 
+    # --------------------------------------------------------
+    # TOUCH UI
+    # --------------------------------------------------------
+    def _draw_touch_button(self, x, y, size, label):
+        alpha = 0.7
+        border_w = max(2.0, size * 0.08)
+        self.touch_group.add(Color(0.7, 0.7, 0.7, alpha))
+        self.touch_group.add(Rectangle(pos=(x, y), size=(size, size)))
+        self.touch_group.add(Color(1, 1, 1, alpha))
+        self.touch_group.add(Line(rectangle=(x, y, size, size), width=border_w * 0.35))
+        tex = self._measure_label(label, int(size * 0.35))
+        lbl_x = x + (size - tex.width) / 2
+        lbl_y = y + (size - tex.height) / 2
+        self.touch_group.add(Color(1, 1, 1, alpha))
+        self.touch_group.add(Rectangle(texture=tex, pos=(lbl_x, lbl_y), size=tex.size))
+
+    def _layout_touch_ui(self):
+        self.touch_group.clear()
+        self.touch_button_boxes = {}
+
+        if self.control_mode != "touch":
+            return
+        if self.state in ("main_menu", "character_select", "stage_select"):
+            return
+
+        w = float(self.width or Window.size[0] or 1)
+        h = float(self.height or Window.size[1] or 1)
+        size = min(max(70.0, min(w, h) * 0.09), 140.0)
+        pad = w * 0.07
+        bottom = h * 0.12
+        spacing = size * 1.05
+
+        # D-pad (left side)
+        center_x = pad + size * 1.3
+        center_y = bottom + size * 1.4
+        dpad_positions = {
+            "left": (center_x - spacing, center_y),
+            "right": (center_x + spacing, center_y),
+            "up": (center_x, center_y + spacing),
+            "down": (center_x, center_y - spacing),
+        }
+        for action, (cx, cy) in dpad_positions.items():
+            px = cx - size / 2
+            py = cy - size / 2
+            label = {"left": "\u2190", "right": "\u2192", "up": "\u2191", "down": "\u2193"}[action]
+            self._draw_touch_button(px, py, size, label)
+            self.touch_button_boxes[action] = (px, py, size, size)
+
+        # Action buttons (right side)
+        act_spacing = size * 1.2
+        start_x = w - pad - size * 2.6
+        act_y = bottom + size * 1.0
+        actions = [("punch", "P"), ("kick", "K"), ("special", "S")]
+        for idx, (action, label) in enumerate(actions):
+            px = start_x + idx * act_spacing
+            py = act_y
+            self._draw_touch_button(px, py, size, label)
+            self.touch_button_boxes[action] = (px, py, size, size)
+
     def _enter_main_menu(self):
         self.state = "main_menu"
         self._hide_banner()
         self._reset_round_data()
         self._render_main_menu()
+        self._layout_touch_ui()
 
     def _enter_character_select(self):
         self.state = "character_select"
@@ -968,59 +1069,344 @@ class FighterGame(Widget):
         self.selected_stage_index = (self.selected_stage_index + direction) % max(1, total)
         self._render_stage_select()
 
-    # --------------------------------------------------------
-    # INPUT HANDLING (P1 ONLY)
-    # --------------------------------------------------------
-    def _on_key_down(self, window, keycode, scancode, codepoint, modifiers):
-        name = keyname_from_event(keycode, codepoint)
-        self.held.add(name)
+    @property
+    def control_mode(self):
+        return self.control_modes[self.selected_control_mode_index]
 
+    def _toggle_control_mode(self, delta=1):
+        self.selected_control_mode_index = (self.selected_control_mode_index + delta) % max(1, len(self.control_modes))
         if self.state == "main_menu":
-            if name in ("enter", "space"):
-                self._enter_character_select()
+            self._render_main_menu()
+        self.input.reset()
+        self.touch_actions.clear()
+        self._pending_jump = False
+        self._pending_attack = False
+        self._layout_touch_ui()
+
+    def _option_index_from_touch(self, x, options):
+        if not options:
+            return None
+        width = self.width or Window.size[0] or 1
+        height = self.height or Window.size[1] or 1
+        box_size = min(width, height) * 0.22
+        spacing = box_size * 0.1
+        start_x = (width - (box_size * len(options) + spacing * (len(options) - 1))) / 2
+        centers = [start_x + idx * (box_size + spacing) + box_size / 2 for idx in range(len(options))]
+        closest_idx = min(range(len(centers)), key=lambda idx: abs(x - centers[idx]))
+        return closest_idx
+
+    def _handle_touch_menu(self, touch):
+        if self.state == "main_menu":
+            x, y = touch.x, touch.y
+            if self._main_menu_play_rect:
+                px, py, pw, ph = self._main_menu_play_rect
+                if px <= x <= px + pw and py <= y <= py + ph:
+                    self._enter_character_select()
+                    return True
+            if self._main_menu_control_rect:
+                cx, cy, cw, ch = self._main_menu_control_rect
+                if cx <= x <= cx + cw and cy <= y <= cy + ch:
+                    self._toggle_control_mode(1)
+                    return True
+            # tap elsewhere still starts
+            self._enter_character_select()
             return True
 
         if self.state == "character_select":
-            if name in ("left", "a", "up"):
-                self._move_character_cursor(-1)
-            elif name in ("right", "d", "down"):
-                self._move_character_cursor(1)
-            elif name in ("enter", "space"):
+            idx = self._option_index_from_touch(touch.x, self.character_options)
+            if idx is None:
+                return False
+            if idx == self.selected_character_index:
                 self._enter_stage_select()
+            else:
+                self.selected_character_index = idx
+                self._render_character_select()
             return True
 
         if self.state == "stage_select":
-            if name in ("left", "a", "up"):
-                self._move_stage_cursor(-1)
-            elif name in ("right", "d", "down"):
-                self._move_stage_cursor(1)
-            elif name in ("enter", "space"):
+            idx = self._option_index_from_touch(touch.x, self.stage_options)
+            if idx is None:
+                return False
+            if idx == self.selected_stage_index:
                 self._start_match()
+            else:
+                self.selected_stage_index = idx
+                self._render_stage_select()
             return True
 
         if self.state == "match_over":
-            if name in ("r", "enter", "space"):
-                self._reset_match()
-            elif name in ("m", "escape", "backspace"):
-                self._enter_main_menu()
+            self._reset_match()
             return True
 
-        if name in ("w", "up"):
-            self.p1.jump()
+        return False
 
-        if name in ("j", "space"):
-            self.p1.start_attack()
+    # --------------------------------------------------------
+    # INPUT HANDLING (P1 ONLY)
+    # --------------------------------------------------------
+    def _action_from_keyname(self, name):
+        if name in ("enter", "space"):
+            return "confirm"
+        if name in ("left", "a"):
+            return "left"
+        if name in ("right", "d"):
+            return "right"
+        if name in ("up", "w"):
+            return "up"
+        if name in ("down", "s"):
+            return "down"
+        if name in ("m", "escape", "backspace"):
+            return "back"
+        return None
+
+    def _handle_menu_action(self, action):
+        if self.state == "main_menu":
+            if action == "confirm":
+                self._enter_character_select()
+                return True
+            if action in ("left", "right"):
+                delta = -1 if action == "left" else 1
+                self._toggle_control_mode(delta)
+                return True
+            return False
+
+        if self.state == "character_select":
+            if action in ("left", "up"):
+                self._move_character_cursor(-1)
+                return True
+            if action in ("right", "down"):
+                self._move_character_cursor(1)
+                return True
+            if action == "confirm":
+                self._enter_stage_select()
+                return True
+            return False
+
+        if self.state == "stage_select":
+            if action in ("left", "up"):
+                self._move_stage_cursor(-1)
+                return True
+            if action in ("right", "down"):
+                self._move_stage_cursor(1)
+                return True
+            if action == "confirm":
+                self._start_match()
+                return True
+            return False
+
+        if self.state == "match_over":
+            if action == "confirm":
+                self._reset_match()
+                return True
+            if action == "back":
+                self._enter_main_menu()
+                return True
+            return False
+
+        return False
+
+    def _queue_jump(self):
+        self._pending_jump = True
+
+    def _queue_attack(self):
+        self._pending_attack = True
+
+    def _on_key_down(self, window, keycode, scancode, codepoint, modifiers):
+        name = keyname_from_event(keycode, codepoint)
+        action = self._action_from_keyname(name)
+
+        if action and self._handle_menu_action(action):
+            return True
+
+        source = "keyboard"
+
+        if name in ("left", "a"):
+            self.input.set("left", True, source)
+        elif name in ("right", "d"):
+            self.input.set("right", True, source)
+        elif name in ("w", "up"):
+            if self.input.set("up", True, source):
+                self._queue_jump()
+        elif name in ("s", "down"):
+            self.input.set("down", True, source)
+        elif name in ("j", "space"):
+            if self.input.set("punch", True, source):
+                self._queue_attack()
 
         return True
 
     def _on_key_up(self, window, keycode, *args):
         name = keyname_from_keyup(keycode)
-        self.held.discard(name)
+        source = "keyboard"
+
+        if name in ("left", "a"):
+            self.input.set("left", False, source)
+        elif name in ("right", "d"):
+            self.input.set("right", False, source)
+        elif name in ("w", "up"):
+            self.input.set("up", False, source)
+        elif name in ("s", "down"):
+            self.input.set("down", False, source)
+        elif name in ("j", "space"):
+            self.input.set("punch", False, source)
+
+        return True
+
+    def _on_joy_axis(self, window, stickid, axisid, value):
+        """Map joystick axes to actions. Axis 0: horizontal; Axis 1: vertical (jump)."""
+        source = f"pad:{stickid}"
+        deadzone = 0.35
+        if axisid == 0:
+            if value < -deadzone:
+                self.input.set("left", True, source)
+                self.input.set("right", False, source)
+            elif value > deadzone:
+                self.input.set("right", True, source)
+                self.input.set("left", False, source)
+            else:
+                self.input.set("left", False, source)
+                self.input.set("right", False, source)
+        elif axisid == 1:
+            if value < -0.55:
+                if self.input.set("up", True, source):
+                    self._queue_jump()
+            else:
+                self.input.set("up", False, source)
+        return True
+
+    def _on_joy_hat(self, window, stickid, hatid, value):
+        source = f"pad:{stickid}:hat{hatid}"
+        x, y = value
+        self.input.set("left", x < 0, source)
+        self.input.set("right", x > 0, source)
+
+        if y > 0:
+            if self.input.set("up", True, source):
+                self._queue_jump()
+        else:
+            self.input.set("up", False, source)
+
+        self.input.set("down", y < 0, source)
+
+        # Let the D-pad also steer menus
+        if x < 0:
+            self._handle_menu_action("left")
+        elif x > 0:
+            self._handle_menu_action("right")
+        elif y > 0:
+            self._handle_menu_action("up")
+        elif y < 0:
+            self._handle_menu_action("down")
+        return True
+
+    def _on_joy_button_down(self, window, stickid, buttonid):
+        source = f"pad:{stickid}"
+
+        if self.state != "playing" and buttonid in (0, 1, 2, 3, 7):
+            if self._handle_menu_action("confirm"):
+                return True
+
+        if buttonid in (0, 3):  # A / Y
+            if self.input.set("up", True, source):
+                self._queue_jump()
+        elif buttonid in (1, 2):  # B / X
+            if self.input.set("punch", True, source):
+                self._queue_attack()
+        elif buttonid in (7,):  # Start / Options
+            if self._handle_menu_action("confirm"):
+                return True
+
+        return True
+
+    def _on_joy_button_up(self, window, stickid, buttonid):
+        source = f"pad:{stickid}"
+
+        if buttonid in (0, 3):
+            self.input.set("up", False, source)
+        elif buttonid in (1, 2):
+            self.input.set("punch", False, source)
+
+        return True
+
+    def _actions_from_touch(self, touch):
+        """Map touch position to actions using the on-screen buttons."""
+        if self.control_mode != "touch":
+            return set()
+        actions = set()
+        hit_pad = max(6.0, min(float(self.width or 0), float(self.height or 0)) * 0.01)
+        for action, (x, y, w, h) in self.touch_button_boxes.items():
+            if (x - hit_pad) <= touch.x <= (x + w + hit_pad) and (y - hit_pad) <= touch.y <= (y + h + hit_pad):
+                actions.add(action)
+        return actions
+
+    def _apply_touch_actions(self, touch, actions):
+        source = f"touch:{touch.uid}"
+        prev_actions = self.touch_actions.get(touch.uid, set())
+
+        # Clear actions that ended
+        for action in prev_actions - actions:
+            self.input.set(action, False, source)
+
+        # Set new/continued actions
+        for action in actions:
+            became_active = self.input.set(action, True, source)
+            if became_active:
+                if action == "up":
+                    self._queue_jump()
+                elif action in ("punch", "kick"):
+                    self._queue_attack()
+
+        if actions:
+            self.touch_actions[touch.uid] = actions
+        elif touch.uid in self.touch_actions:
+            self.touch_actions.pop(touch.uid, None)
+
+    def on_touch_down(self, touch):
+        # Menu taps: treat as confirm/select
+        if self.state in ("main_menu", "character_select", "stage_select", "match_over"):
+            if self._handle_touch_menu(touch):
+                return True
+
+        if self.control_mode != "touch":
+            return super().on_touch_down(touch)
+        if self.state not in ("playing", "round_over", "match_over"):
+            return super().on_touch_down(touch)
+
+        actions = self._actions_from_touch(touch)
+        if not actions:
+            return super().on_touch_down(touch)
+        self._apply_touch_actions(touch, actions)
+        return True
+
+    def on_touch_move(self, touch):
+        if self.control_mode != "touch":
+            return super().on_touch_move(touch)
+        if self.state not in ("playing", "round_over", "match_over"):
+            return super().on_touch_move(touch)
+
+        actions = self._actions_from_touch(touch)
+        if not actions and touch.uid not in self.touch_actions:
+            return super().on_touch_move(touch)
+        self._apply_touch_actions(touch, actions)
+        return True
+
+    def on_touch_up(self, touch):
+        if self.control_mode != "touch":
+            return super().on_touch_up(touch)
+        source = f"touch:{touch.uid}"
+        self.input.clear_source(source)
+        self.touch_actions.pop(touch.uid, None)
         return True
 
     def _apply_input_p1(self, dt):
-        left = ("a" in self.held or "left" in self.held)
-        right = ("d" in self.held or "right" in self.held)
+        if self._pending_jump:
+            self.p1.jump()
+            self._pending_jump = False
+        if self._pending_attack:
+            self.p1.start_attack()
+            self._pending_attack = False
+
+        left = self.input.get("left")
+        right = self.input.get("right")
 
         if left and not right:
             self.p1.move_left()
@@ -1324,16 +1710,19 @@ class FighterGame(Widget):
         self.round += 1
         self._reset_round_data()
         self._queue_round_intro(self.round)
+        self._layout_touch_ui()
 
     def _resume_play(self, hide_banner=True):
         if hide_banner:
             self._hide_banner()
         self.state = "playing"
+        self._layout_touch_ui()
 
     def _end_match(self):
         txt = "VICTORY!" if self.p1_wins > self.p2_wins else "DEFEAT..."
-        self._show_banner(f"{txt}\n\nPress R to Restart", seconds=None)
+        self._show_banner(f"{txt}\n\nPress R or tap to restart", seconds=None)
         self.state = "match_over"
+        self._layout_touch_ui()
 
     def _reset_match(self):
         self._start_match()
@@ -1359,7 +1748,10 @@ class FighterGame(Widget):
 
     def _start_match(self):
         self._clear_ui()
-        self.held.clear()
+        self.input.reset()
+        self.touch_actions.clear()
+        self._pending_jump = False
+        self._pending_attack = False
         self._apply_selection()
         self._build_scene()
         self.state = "round_over"  # temporary gate to block input until intro ends
@@ -1369,6 +1761,7 @@ class FighterGame(Widget):
         self._reset_round_data()
         stage_name = self.stage_options[self.selected_stage_index]["name"]
         self._queue_round_intro(self.round, stage_name=stage_name)
+        self._layout_touch_ui()
 
     def _handle_defeat_impacts(self):
         for fighter in (self.p1, self.p2):
@@ -1469,7 +1862,7 @@ class FighterGame(Widget):
             self.p1.x += push
             self.p2.x -= push
 
-        from constants import STAGE_MARGIN
+        from game_fighter.constants import STAGE_MARGIN
         max_x = self.stage_width - SPRITE_SIZE - STAGE_MARGIN
         self.p1.x = max(STAGE_MARGIN, min(max_x, self.p1.x))
         self.p2.x = max(STAGE_MARGIN, min(max_x, self.p2.x))

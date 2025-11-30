@@ -2,8 +2,6 @@ import json
 import os
 import random
 
-from game_fighter import constants 
-from game_fighter import sprite_anim
 from game_fighter.constants import PHYSICS_SCALE, SCALE_FACTOR, SPRITE_SCALE, SPRITE_SIZE, STAGE_MARGIN
 from game_fighter.sprite_anim import SpriteAnim
 

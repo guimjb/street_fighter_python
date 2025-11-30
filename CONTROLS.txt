@@ -1,0 +1,17 @@
+Retro System - Controls
+
+Launch
+- From the repository root: python -m game_fighter.fighter_game
+
+Menus
+- Select controls in the main menu: Left/Right (or tap the control box) toggles Keyboard/Controller vs Touch. Enter/Space or tapping Play continues. R/Enter/Space restarts after a match; M/Esc/Backspace returns to main menu when match is over.
+- Controller: D-pad or left stick to navigate; A/B/X/Y or Start/Options to confirm; confirm on match-over to restart.
+- Touch: Tap Play/portraits/stages to select; tapping the current selection confirms; tap the match-over banner to restart.
+
+In-match
+- Keyboard: A or Left to move left; D or Right to move right; W or Up to jump; J or Space to attack.
+- Controller: Left stick or D-pad to move; Up to jump; A or Y buttons jump; B or X buttons attack.
+- Touch (when selected in the menu): On-screen D-pad on the left for up/down/left/right. Right side has three buttons: Punch (P), Kick (K, placeholder), and Special (S, placeholder). Buttons are semi-transparent so gameplay remains visible.
+
+Notes
+- Analog sticks use a small deadzone; jump triggers on the press of Up/A/Y rather than holding.
