@@ -231,7 +231,7 @@ class FighterGame(Widget):
         # Attach render layers in correct order
         self._attach_after_layers()
         self._ai_timer = 0.0
-        self._ai_ctx = {"state": "idle", "timer": 0.0, "cooldown": 0.0, "target_x": None, "jump_ok": True}
+        self._ai_ctx = {"state": "idle", "timer": 0.0, "cooldown": 0.0, "target_x": None, "jump_ok": True, "jump_cooldown": 0.0, "idle": 0.0}
 
         # Show main menu or jump straight into play for debugging
         if self.debug_mode:
@@ -1834,8 +1834,8 @@ class FighterGame(Widget):
         distance = abs(p1.x - p2.x)
         horiz_dir = 1 if p1.x > p2.x else -1
 
-        # Keep facing unless mid-attack (handled in fighter) to avoid snapping during moves
-        if not (p2.attack and p2.attack.get("phase") in ("startup", "active", "recovery")):
+        # Always face the player unless intentionally backing out of a corner
+        if not (self._ai_ctx.get("state") == "evade" and (p2.x < STAGE_MARGIN + SPRITE_SIZE * 0.4 or p2.x > self.stage_width - SPRITE_SIZE * 1.4 - STAGE_MARGIN)):
             p2.facing = 1 if p2.x < p1.x else -1
 
         # AI context/state machine
@@ -1843,6 +1843,11 @@ class FighterGame(Widget):
         ctx["timer"] = max(0.0, ctx.get("timer", 0.0) - dt)
         ctx["cooldown"] = max(0.0, ctx.get("cooldown", 0.0) - dt)
         ctx["jump_cooldown"] = max(0.0, ctx.get("jump_cooldown", 0.0) - dt)
+        # Track idle time to break stalemates: if AI stands still too long, force an advance/attack
+        if abs(p2.vx) < 1e-3 and not p2.attack:
+            ctx["idle"] = ctx.get("idle", 0.0) + dt
+        else:
+            ctx["idle"] = 0.0
 
         # If stunned/defeated, let physics handle recovery
         if p2.hitstun > 0 or p2.defeated or p2.victorious:
@@ -1912,6 +1917,8 @@ class FighterGame(Widget):
         elif state == "pressure":
             # Keep poking; back out if cornered to avoid endless flinch
             if ctx["cooldown"] <= 0 and not p2.attack:
+                # Face the player before throwing a poke
+                p2.facing = 1 if p2.x < p1.x else -1
                 p2.start_attack()
                 ctx["cooldown"] = 0.35
             desired = target_x
@@ -1925,6 +1932,17 @@ class FighterGame(Widget):
             if cornered and random.random() < 0.2:
                 ctx["state"] = "evade"
                 ctx["timer"] = 0.3
+
+        # If we've been idle too long, push forward and attack
+        if ctx.get("idle", 0.0) > 1.5 and not p2.attack:
+            ctx["state"] = "pressure"
+            ctx["timer"] = 0.4
+            ctx["target_x"] = p1.x - horiz_dir * (SPRITE_SIZE * 0.6)
+            ctx["idle"] = 0.0
+            ctx["jump_ok"] = False
+            p2.facing = 1 if p2.x < p1.x else -1
+            p2.start_attack()
+            ctx["cooldown"] = 0.35
 
         # If we're very close and idle, force a poke to avoid standing still
         if distance < 150 and ctx["cooldown"] <= 0 and not p2.attack:
