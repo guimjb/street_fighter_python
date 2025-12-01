@@ -56,7 +56,7 @@ class Fighter:
         # Attack logic
         self.attack = None
         # Slightly longer hitbox width for punch reach
-        self.attack_cfg = dict(startup=0.08, active=0.30, recovery=0.22, w=160, h=48, dmg=10)
+        self.attack_cfg = dict(startup=0.08, active=0.30, recovery=0.22, w=1, h=48, dmg=10)
 
         # Drawable assigned externally
         self.rect = None

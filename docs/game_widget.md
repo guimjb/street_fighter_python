@@ -77,7 +77,7 @@
 - `_apply_input_p1(dt)`: Applies aggregated input to P1: queued jump/attack, then movement left/right; otherwise stops. Called each frame in `update`.
 
 ### AI and collision
-- `_ai_update(dt)`: Simple AI for P2. Chooses actions based on distance and player state, setting movement/attack decisions with cooldown. Called each frame during play.
+- `_ai_update(dt)`: AI for P2 using a finite-state machine (approach/pressure/evade) plus a 1D greedy path step (A*-style on a line) toward targets. State changes only when a think timer elapses to reduce jitter; evasive state triggers when cornered/pressured to avoid stun-lock; pressure state pokes with cooldown; close-range idling is broken by forcing a poke if idle; jumps are heavily throttled (one per state cycle with a cooldown); long-range idle is broken up by occasional pressure so the AI engages. Called each frame during play.
 - `aabb(a, b) -> bool` (static): Axis-aligned bounding-box overlap test. Used in `_check_hit`.
 - `_check_hit(attacker, defender)`: Retrieves hitbox/hurtbox, checks overlap, applies damage/knockback, sets hitstun/defeat/victory, and triggers camera shake/banners. Called each frame for both attacker/defender.
 

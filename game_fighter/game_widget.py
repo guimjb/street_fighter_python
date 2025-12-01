@@ -1,15 +1,17 @@
 import os
 import random
+import math
 
 from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
 from kivy.core.text import Label as CoreLabel
 from kivy.core.window import Window
+from kivy.core.audio import SoundLoader
 from kivy.graphics import Color, Rectangle, InstructionGroup, Ellipse, PushMatrix, PopMatrix, Scale, Translate, Line
 from kivy.graphics.texture import Texture
 from kivy.uix.widget import Widget
 
-from game_fighter.constants import SPRITE_SIZE, HURTBOX_W, HURTBOX_H, SCALE_FACTOR, SPRITE_SCALE, PHYSICS_SCALE
+from game_fighter.constants import SPRITE_SIZE, HURTBOX_W, HURTBOX_H, SCALE_FACTOR, SPRITE_SCALE, PHYSICS_SCALE, STAGE_MARGIN
 from game_fighter.fighter import Fighter
 from game_fighter.input_manager import InputManager
 
@@ -84,6 +86,7 @@ class FighterGame(Widget):
         self.control_modes = ["keyboard", "touch"]
         # Default to touch controls so mobile devices start with on-screen buttons
         self.selected_control_mode_index = self.control_modes.index("touch") if "touch" in self.control_modes else 0
+        self.main_menu_index = 0
         # Input
         self.input = InputManager()
         self.touch_actions = {}  # touch.id -> set(actions)
@@ -93,7 +96,10 @@ class FighterGame(Widget):
         self.touch_button_boxes = {}
         self._main_menu_play_rect = None
         self._main_menu_control_rect = None
-        self.show_hitboxes = False  # Toggle debug overlays on/off (default hidden)
+        self._win_button_rects = {}
+        self.win_menu_index = 0
+        self.transition_lock = False
+        self.show_hitboxes = False  # Toggle debug overlays on/off
 
         # Physics
         self.gravity = -2200 * PHYSICS_SCALE
@@ -163,6 +169,36 @@ class FighterGame(Widget):
         self._init_fighters()
         self._apply_sprite_scale()
 
+        # Audio
+        self.music = None
+        self.current_music_key = None
+        self.current_stage_track = None
+        self._music_on_stop = None
+        self.sound_cache = {}
+        self.music_volume = 0.8
+        self.sfx_volume = 0.8
+        self.music_library = {
+            "title": os.path.join(ASSETS_DIR, "projectsounds", "track", "titleTheme.mp3"),
+            "select": os.path.join(ASSETS_DIR, "projectsounds", "track", "characterSelect.mp3"),
+            "victory": os.path.join(ASSETS_DIR, "projectsounds", "track", "victoryScreen.mp3"),
+            "continue": os.path.join(ASSETS_DIR, "projectsounds", "track", "continueQustion.mp3"),
+            "gameover": os.path.join(ASSETS_DIR, "projectsounds", "track", "gameoverScreen.mp3"),
+        }
+        self.stage_tracks = [
+            os.path.join(ASSETS_DIR, "projectsounds", "track", name)
+            for name in ("ryuTheme.mp3", "kenTheme.mp3", "bisonTheme.mp3", "blankaTheme.mp3", "chunliTheme.mp3")
+        ]
+        self.sfx_library = {
+            "optionscroll": os.path.join(ASSETS_DIR, "projectsounds", "effect", "optionscroll.wav"),
+            "optionconfirm": os.path.join(ASSETS_DIR, "projectsounds", "effect", "optionconfirm.wav"),
+            "gamestart": os.path.join(ASSETS_DIR, "projectsounds", "effect", "gamestart.wav"),
+        }
+        self.continue_duration = 10.0
+        self.continue_timer = 0.0
+        self.match_result = None  # "win", "lose", or None
+        self.options_index = 0
+        self._options_hitboxes = {}
+
         # Camera transform (applied to world)
         self.camera_scale = 1.4  # restore previous zoom for 16:9
         self.transform_before = InstructionGroup()
@@ -195,7 +231,7 @@ class FighterGame(Widget):
         # Attach render layers in correct order
         self._attach_after_layers()
         self._ai_timer = 0.0
-        self._ai_action = None
+        self._ai_ctx = {"state": "idle", "timer": 0.0, "cooldown": 0.0, "target_x": None, "jump_ok": True}
 
         # Show main menu or jump straight into play for debugging
         if self.debug_mode:
@@ -205,6 +241,153 @@ class FighterGame(Widget):
         else:
             self._enter_main_menu()
         self._layout_touch_ui()
+
+    # --------------------------------------------------------
+    # AUDIO HELPERS
+    # --------------------------------------------------------
+    def _load_sound(self, path):
+        if not path or not os.path.exists(path):
+            return None
+        if path in self.sound_cache:
+            return self.sound_cache[path]
+        try:
+            snd = SoundLoader.load(path)
+            if snd:
+                self.sound_cache[path] = snd
+            return snd
+        except Exception:
+            return None
+
+    def _stop_music(self):
+        if self.music and self._music_on_stop:
+            try:
+                self.music.unbind(on_stop=self._music_on_stop)
+            except Exception:
+                pass
+        if self.music:
+            try:
+                self.music.stop()
+            except Exception:
+                pass
+        self._music_on_stop = None
+        self.music = None
+        self.current_music_key = None
+        self.current_stage_track = None
+
+    def _play_music(self, key, loop=True):
+        path = self.music_library.get(key)
+        if not path:
+            return
+        self._play_music_path(path, key=key, loop=loop, on_stop=None)
+
+    def _ensure_music(self, key, loop=True):
+        """Play the given music key only if it is not already active."""
+        if self.music and self.current_music_key == key:
+            return
+        self._play_music(key, loop=loop)
+
+    def _play_music_path(self, path, key=None, loop=True, on_stop=None):
+        snd = self._load_sound(path)
+        if not snd:
+            return
+        if self.music and self.music is not snd:
+            try:
+                self.music.stop()
+            except Exception:
+                pass
+        if self._music_on_stop and self.music:
+            try:
+                self.music.unbind(on_stop=self._music_on_stop)
+            except Exception:
+                pass
+        self.music = snd
+        self.current_music_key = key or path
+        self.music.loop = loop
+        try:
+            self.music.volume = self.music_volume
+        except Exception:
+            pass
+        if on_stop:
+            self._music_on_stop = on_stop
+            try:
+                self.music.bind(on_stop=on_stop)
+            except Exception:
+                pass
+        else:
+            self._music_on_stop = None
+        try:
+            self.music.play()
+        except Exception:
+            pass
+
+    def _start_stage_music(self, previous=None):
+        tracks = [p for p in self.stage_tracks if os.path.exists(p)]
+        if not tracks:
+            return
+        choices = [p for p in tracks if p != previous] or tracks
+        path = random.choice(choices)
+
+        def _next_stage_track(*args):
+            if self.state not in ("playing", "round_over"):
+                return
+            self._start_stage_music(previous=path)
+
+        self.current_stage_track = path
+        self._play_music_path(path, key="stage", loop=False, on_stop=_next_stage_track)
+
+    def _play_sfx(self, name):
+        path = self.sfx_library.get(name)
+        if not path or not os.path.exists(path):
+            return
+        snd = SoundLoader.load(path)
+        if not snd:
+            return
+        try:
+            snd.volume = self.sfx_volume
+        except Exception:
+            pass
+        try:
+            snd.play()
+        except Exception:
+            pass
+
+    def _play_sfx_and_then(self, name, on_complete):
+        """Play an SFX and run callback after it finishes (or immediately if unavailable)."""
+        path = self.sfx_library.get(name)
+        snd = SoundLoader.load(path) if path and os.path.exists(path) else None
+        if not snd:
+            on_complete()
+            return
+
+        called = {"done": False}
+
+        def done(*args):
+            if called["done"]:
+                return
+            called["done"] = True
+            try:
+                snd.unbind(on_stop=done)
+            except Exception:
+                pass
+            on_complete()
+
+        try:
+            snd.bind(on_stop=done)
+        except Exception:
+            pass
+        try:
+            snd.volume = self.sfx_volume
+        except Exception:
+            pass
+        try:
+            snd.play()
+        except Exception:
+            done()
+            return
+        # Fallback in case on_stop doesn't fire
+        length = getattr(snd, "length", None)
+        if length and length > 0:
+            Clock.schedule_once(lambda *_: done(), length + 0.05)
 
     # --------------------------------------------------------
     # LOAD CHARACTER SPRITES + CREATE P1/P2
@@ -822,8 +1005,8 @@ class FighterGame(Widget):
         return rect
 
     def _add_menu_background(self):
-        # Dark blue backdrop for menu screens
-        self.ui_group.add(Color(0.05, 0.08, 0.2, 1))
+        # Solid black backdrop for menu screens
+        self.ui_group.add(Color(0, 0, 0, 1))
         self.ui_group.add(Rectangle(pos=(0, 0), size=(self.width, self.height)))
 
     def _draw_logo(self, y, max_w=None, max_h=None, scale=1.0):
@@ -885,45 +1068,40 @@ class FighterGame(Widget):
 
         btn_w = min(self.width * 0.32, 520)
         btn_h = 120
+        gap = max(self.height * 0.04, 36)
         btn_x = (self.width - btn_w) / 2
         btn_y = self.height * 0.42
         if logo_rect:
-            gap = max(self.height * 0.035, 30)
             btn_y = min(btn_y, logo_rect.pos[1] - btn_h - gap)
-        btn_y = max(btn_y, self.height * 0.14)
+        btn_y = max(btn_y, self.height * 0.2)
 
+        self.main_menu_index = min(1, getattr(self, "main_menu_index", 0))
+        self._main_menu_control_rect = None
+
+        # Play button
         self.ui_group.add(Color(0.85, 0.35, 0.25, 1))
         self.ui_group.add(Rectangle(pos=(btn_x, btn_y), size=(btn_w, btn_h)))
+        if self.main_menu_index == 0:
+            self.ui_group.add(Color(1, 1, 1, 1))
+            self.ui_group.add(Line(rectangle=(btn_x, btn_y, btn_w, btn_h), width=4))
         self._main_menu_play_rect = (btn_x, btn_y, btn_w, btn_h)
-        # Play label centered in button
         play_tex = self._measure_label("Play", 64)
-        lbl_x = btn_x + (btn_w - play_tex.width) / 2
-        lbl_y = btn_y + (btn_h - play_tex.height) / 2
-        self._draw_label("Play", lbl_x, lbl_y, font_px=64)
+        self._draw_label("Play", btn_x + (btn_w - play_tex.width) / 2, btn_y + (btn_h - play_tex.height) / 2, font_px=64)
 
-        # Control mode selector
-        ctrl_w = min(self.width * 0.36, 560)
-        ctrl_h = max(90, btn_h * 0.7)
-        ctrl_x = (self.width - ctrl_w) / 2
-        ctrl_y = btn_y - max(self.height * 0.11, 90)
-        self._main_menu_control_rect = (ctrl_x, ctrl_y, ctrl_w, ctrl_h)
-        self.ui_group.add(Color(0.15, 0.15, 0.2, 0.8))
-        self.ui_group.add(Rectangle(pos=(ctrl_x, ctrl_y), size=(ctrl_w, ctrl_h)))
-        mode_label = "Keyboard / Controller" if self.control_mode == "keyboard" else "Touch"
-        mode_text = f"Controls: {mode_label}"
-        mode_tex = self._measure_label(mode_text, 52)
-        mode_x = ctrl_x + (ctrl_w - mode_tex.width) / 2
-        mode_y = ctrl_y + (ctrl_h - mode_tex.height) / 2
-        self._draw_label(mode_text, mode_x, mode_y, font_px=52)
-        hint_text = "Left/Right or tap to switch"
-        hint_tex = self._measure_label(hint_text, 32)
-        hint_x = ctrl_x + (ctrl_w - hint_tex.width) / 2
-        hint_y = ctrl_y - max(28, hint_tex.height + 10)
-        self._draw_label(hint_text, hint_x, hint_y, font_px=32, color=(1, 1, 1, 0.7))
+        # Options button (same size)
+        opt_y = btn_y - (btn_h + gap)
+        self.ui_group.add(Color(0.85, 0.35, 0.25, 1))
+        self.ui_group.add(Rectangle(pos=(btn_x, opt_y), size=(btn_w, btn_h)))
+        if self.main_menu_index == 1:
+            self.ui_group.add(Color(1, 1, 1, 1))
+            self.ui_group.add(Line(rectangle=(btn_x, opt_y, btn_w, btn_h), width=4))
+        self._main_menu_options_rect = (btn_x, opt_y, btn_w, btn_h)
+        opt_tex = self._measure_label("Options", 64)
+        self._draw_label("Options", btn_x + (btn_w - opt_tex.width) / 2, opt_y + (btn_h - opt_tex.height) / 2, font_px=64)
 
-        prompt_y = hint_y - max(self.height * 0.05, 42)
+        prompt_y = opt_y - max(self.height * 0.05, 42)
         prompt_y = max(prompt_y, self.height * 0.05)
-        self._center_label("Press Enter or tap Play to continue", prompt_y, font_px=44, color=(1, 1, 1, 0.8))
+        self._center_label("Use Up/Down to select; Enter or tap to confirm", prompt_y, font_px=38, color=(1, 1, 1, 0.8))
 
     def _render_select_grid(self, title, options, selected_idx):
         self._clear_ui()
@@ -983,8 +1161,104 @@ class FighterGame(Widget):
             self._render_character_select()
         elif self.state == "stage_select":
             self._render_stage_select()
+        elif self.state == "match_over_win":
+            self._render_win_menu()
+        elif self.state == "continue":
+            self._render_continue_prompt()
+        elif self.state == "game_over":
+            self._render_game_over()
         else:
             self._clear_ui()
+        if self.state == "options":
+            self._render_options()
+
+    def _render_win_menu(self):
+        self._clear_ui()
+        mid_y = self.height * 0.58
+        self._center_label("VICTORY!", mid_y, font_px=120, color=(1, 1, 1, 1))
+        btn_w = min(self.width * 0.28, 420)
+        btn_h = 120
+        gap = max(self.width * 0.02, 30)
+        total_w = btn_w * 2 + gap
+        start_x = (self.width - total_w) / 2
+        btn_y = self.height * 0.38
+        labels = [("Restart", "restart"), ("Menu", "menu")]
+        self._win_button_rects = {}
+        for idx, (text, key) in enumerate(labels):
+            x = start_x + idx * (btn_w + gap)
+            is_sel = (idx == self.win_menu_index)
+            self.ui_group.add(Color(0.2, 0.8, 0.3, 0.9) if is_sel else Color(0.1, 0.1, 0.15, 0.8))
+            self.ui_group.add(Rectangle(pos=(x, btn_y), size=(btn_w, btn_h)))
+            self._win_button_rects[key] = (x, btn_y, btn_w, btn_h)
+            tex = self._measure_label(text, 56)
+            lbl_x = x + (btn_w - tex.width) / 2
+            lbl_y = btn_y + (btn_h - tex.height) / 2
+            self._draw_label(text, lbl_x, lbl_y, font_px=56)
+        self._center_label("Use Left/Right or tap to choose, Enter to confirm", self.height * 0.24, font_px=36, color=(1, 1, 1, 0.85))
+
+    def _render_continue_prompt(self):
+        self._clear_ui()
+        top_y = self.height * 0.62
+        self._center_label("CONTINUE?", top_y, font_px=120, color=(1, 1, 1, 1))
+        remaining = max(0.0, self.continue_timer)
+        timer_text = f"{max(0, math.ceil(remaining))}"
+        self._center_label(timer_text, self.height * 0.48, font_px=140, color=(1, 0.6, 0.4, 1))
+        self._center_label("Press Enter/Space to continue or tap screen", self.height * 0.32, font_px=48, color=(1, 1, 1, 0.8))
+
+    def _render_game_over(self):
+        self._clear_ui()
+        self._center_label("GAME OVER", self.height * 0.56, font_px=120, color=(1, 0.3, 0.3, 1))
+        self._center_label("Press Enter/Space to return to menu", self.height * 0.38, font_px=52, color=(1, 1, 1, 0.85))
+
+    def _render_options(self):
+        self._clear_ui()
+        self._add_menu_background()
+        self._center_label("Options", self.height * 0.72, font_px=88)
+        rows = [
+            {"label": "Music Volume", "type": "music", "value": self.music_volume},
+            {"label": "Effect Volume", "type": "sfx", "value": self.sfx_volume},
+            {"label": "Control Mode", "type": "control", "value": self.control_mode.title()},
+        ]
+        self._options_hitboxes = {}
+        btn_w = min(self.width * 0.18, 220)
+        btn_h = 90
+        gap = max(self.width * 0.02, 30)
+        start_x = (self.width - (btn_w * 2 + gap)) / 2
+        row_y = self.height * 0.52
+        row_gap = btn_h * 1.3
+        for idx, row in enumerate(rows):
+            y = row_y - idx * row_gap
+            self._draw_label(row["label"], self.width * 0.26, y + (btn_h - 40) / 2, font_px=48)
+            minus_x = start_x
+            plus_x = start_x + btn_w + gap
+            if row["type"] in ("music", "sfx"):
+                val = row["value"]
+                for is_plus, x in ((False, minus_x), (True, plus_x)):
+                    sel = (self.options_index == idx and ((val < 1 and is_plus) or (val > 0 and not is_plus)))
+                    self.ui_group.add(Color(0.2, 0.6, 0.9, 0.9) if sel else Color(0.15, 0.15, 0.2, 0.8))
+                    self.ui_group.add(Rectangle(pos=(x, y), size=(btn_w, btn_h)))
+                    txt = "+" if is_plus else "-"
+                    tex = self._measure_label(txt, 64)
+                    self._draw_label(txt, x + (btn_w - tex.width) / 2, y + (btn_h - tex.height) / 2, font_px=64)
+                    key = (idx, "plus" if is_plus else "minus")
+                    self._options_hitboxes[key] = (x, y, btn_w, btn_h)
+                pct = int(round(val * 100))
+                self._draw_label(f"{pct}%", self.width * 0.66, y + (btn_h - 48) / 2, font_px=48, color=(1, 1, 1, 0.9))
+            else:
+                # Control mode toggle
+                sel = (self.options_index == idx)
+                self.ui_group.add(Color(0.2, 0.6, 0.9, 0.9 if sel else 0.8))
+                self.ui_group.add(Rectangle(pos=(minus_x, y), size=(btn_w * 2 + gap, btn_h)))
+                if sel:
+                    self.ui_group.add(Color(1, 1, 1, 1))
+                    self.ui_group.add(Line(rectangle=(minus_x, y, btn_w * 2 + gap, btn_h), width=3))
+                label_tex = self._measure_label(f"{row['value']}", 56)
+                self._draw_label(f"{row['value']}", minus_x + (btn_w * 2 + gap - label_tex.width) / 2, y + (btn_h - label_tex.height) / 2, font_px=56)
+                # Both left/right regions toggle
+                self._options_hitboxes[(idx, "minus")] = (minus_x, y, btn_w * 2 + gap, btn_h)
+                self._options_hitboxes[(idx, "plus")] = (minus_x, y, btn_w * 2 + gap, btn_h)
+
+        self._center_label("Left/Right to adjust, Up/Down to switch, Enter to return", self.height * 0.26, font_px=32, color=(1, 1, 1, 0.8))
 
     # --------------------------------------------------------
     # TOUCH UI
@@ -1008,7 +1282,7 @@ class FighterGame(Widget):
 
         if self.control_mode != "touch":
             return
-        if self.state in ("main_menu", "character_select", "stage_select"):
+        if self.state not in ("playing", "round_over"):
             return
 
         w = float(self.width or Window.size[0] or 1)
@@ -1051,24 +1325,40 @@ class FighterGame(Widget):
         self._reset_round_data()
         self._render_main_menu()
         self._layout_touch_ui()
+        self.match_result = None
+        self.transition_lock = False
+        self._stop_music()
+        self._play_music("title")
 
     def _enter_character_select(self):
         self.state = "character_select"
         self._render_character_select()
+        self.match_result = None
+        self.transition_lock = False
+        self._ensure_music("select")
 
     def _enter_stage_select(self):
         self.state = "stage_select"
         self._render_stage_select()
+        self.transition_lock = False
+        self._ensure_music("select")
+
+    def _enter_options(self):
+        self.state = "options"
+        self.transition_lock = False
+        self._render_options()
 
     def _move_character_cursor(self, direction):
         total = len(self.character_options)
         self.selected_character_index = (self.selected_character_index + direction) % max(1, total)
         self._render_character_select()
+        self._play_sfx("optionscroll")
 
     def _move_stage_cursor(self, direction):
         total = len(self.stage_options)
         self.selected_stage_index = (self.selected_stage_index + direction) % max(1, total)
         self._render_stage_select()
+        self._play_sfx("optionscroll")
 
     @property
     def control_mode(self):
@@ -1078,11 +1368,14 @@ class FighterGame(Widget):
         self.selected_control_mode_index = (self.selected_control_mode_index + delta) % max(1, len(self.control_modes))
         if self.state == "main_menu":
             self._render_main_menu()
+            self._play_sfx("optionscroll")
         self.input.reset()
         self.touch_actions.clear()
         self._pending_jump = False
         self._pending_attack = False
         self._layout_touch_ui()
+        # Ensure any transient navigation lock is cleared after toggling modes
+        self.transition_lock = False
 
     def _option_index_from_touch(self, x, options):
         if not options:
@@ -1102,15 +1395,32 @@ class FighterGame(Widget):
             if self._main_menu_play_rect:
                 px, py, pw, ph = self._main_menu_play_rect
                 if px <= x <= px + pw and py <= y <= py + ph:
-                    self._enter_character_select()
+                    self.main_menu_index = 0
+                    self.transition_lock = True
+                    self._play_sfx_and_then("gamestart", lambda: self._enter_character_select())
                     return True
-            if self._main_menu_control_rect:
-                cx, cy, cw, ch = self._main_menu_control_rect
-                if cx <= x <= cx + cw and cy <= y <= cy + ch:
-                    self._toggle_control_mode(1)
+            if self._main_menu_options_rect:
+                ox, oy, ow, oh = self._main_menu_options_rect
+                if ox <= x <= ox + ow and oy <= y <= oy + oh:
+                    self.main_menu_index = 1
+                    self._enter_options()
                     return True
             # tap elsewhere still starts
-            self._enter_character_select()
+            self.transition_lock = True
+            self._play_sfx_and_then("gamestart", lambda: self._enter_character_select())
+            return True
+
+        if self.state == "options":
+            for key, rect in self._options_hitboxes.items():
+                x, y, w, h = rect
+                if x <= touch.x <= x + w and y <= touch.y <= y + h:
+                    idx, kind = key
+                    self.options_index = idx
+                    delta = 0.1 if kind == "plus" else -0.1
+                    self._adjust_option(idx, delta)
+                    return True
+            # tap outside returns to main menu
+            self._play_sfx_and_then("optionconfirm", lambda: self._enter_main_menu())
             return True
 
         if self.state == "character_select":
@@ -1118,10 +1428,12 @@ class FighterGame(Widget):
             if idx is None:
                 return False
             if idx == self.selected_character_index:
-                self._enter_stage_select()
+                self.transition_lock = True
+                self._play_sfx_and_then("optionconfirm", lambda: self._enter_stage_select())
             else:
                 self.selected_character_index = idx
                 self._render_character_select()
+                self._play_sfx("optionscroll")
             return True
 
         if self.state == "stage_select":
@@ -1129,14 +1441,32 @@ class FighterGame(Widget):
             if idx is None:
                 return False
             if idx == self.selected_stage_index:
-                self._start_match()
+                self.transition_lock = True
+                self._play_sfx_and_then("optionconfirm", lambda: self._start_match())
             else:
                 self.selected_stage_index = idx
                 self._render_stage_select()
+                self._play_sfx("optionscroll")
             return True
 
-        if self.state == "match_over":
-            self._reset_match()
+        if self.state == "match_over_win":
+            for key, rect in self._win_button_rects.items():
+                x, y, w, h = rect
+                if x <= touch.x <= x + w and y <= touch.y <= y + h:
+                    self.win_menu_index = 0 if key == "restart" else 1
+                    self.transition_lock = True
+                    self._play_sfx_and_then("optionconfirm", lambda: self._reset_match() if key == "restart" else self._enter_main_menu())
+                    return True
+            return False
+
+        if self.state == "continue":
+            self.transition_lock = True
+            self._play_sfx_and_then("optionconfirm", lambda: self._reset_match())
+            return True
+
+        if self.state == "game_over":
+            self.transition_lock = True
+            self._play_sfx_and_then("optionconfirm", lambda: self._enter_main_menu())
             return True
 
         return False
@@ -1145,7 +1475,7 @@ class FighterGame(Widget):
     # INPUT HANDLING (P1 ONLY)
     # --------------------------------------------------------
     def _action_from_keyname(self, name):
-        if name in ("enter", "space"):
+        if name in ("enter", "space", "r"):
             return "confirm"
         if name in ("left", "a"):
             return "left"
@@ -1160,13 +1490,26 @@ class FighterGame(Widget):
         return None
 
     def _handle_menu_action(self, action):
+        # Only block actions that would trigger a screen change while a confirm SFX is still playing
+        if self.transition_lock and action == "confirm":
+            return True
         if self.state == "main_menu":
             if action == "confirm":
-                self._enter_character_select()
+                self.transition_lock = True
+                if self.main_menu_index == 0:
+                    self._play_sfx_and_then("gamestart", lambda: self._enter_character_select())
+                elif self.main_menu_index == 1:
+                    self._play_sfx_and_then("optionconfirm", lambda: self._enter_options())
                 return True
-            if action in ("left", "right"):
-                delta = -1 if action == "left" else 1
-                self._toggle_control_mode(delta)
+            if action == "down":
+                self.main_menu_index = min(1, self.main_menu_index + 1)
+                self._render_main_menu()
+                self._play_sfx("optionscroll")
+                return True
+            if action == "up":
+                self.main_menu_index = max(0, self.main_menu_index - 1)
+                self._render_main_menu()
+                self._play_sfx("optionscroll")
                 return True
             return False
 
@@ -1178,7 +1521,8 @@ class FighterGame(Widget):
                 self._move_character_cursor(1)
                 return True
             if action == "confirm":
-                self._enter_stage_select()
+                self.transition_lock = True
+                self._play_sfx_and_then("optionconfirm", lambda: self._enter_stage_select())
                 return True
             return False
 
@@ -1190,16 +1534,67 @@ class FighterGame(Widget):
                 self._move_stage_cursor(1)
                 return True
             if action == "confirm":
-                self._start_match()
+                self.transition_lock = True
+                self._play_sfx_and_then("optionconfirm", lambda: self._start_match())
                 return True
             return False
 
-        if self.state == "match_over":
+        if self.state == "options":
+            if action == "up":
+                self.options_index = max(0, self.options_index - 1)
+                self._render_options()
+                self._play_sfx("optionscroll")
+                return True
+            if action == "down":
+                self.options_index = min(2, self.options_index + 1)
+                self._render_options()
+                self._play_sfx("optionscroll")
+                return True
+            if action == "left":
+                self._adjust_option(self.options_index, -0.1)
+                return True
+            if action == "right":
+                self._adjust_option(self.options_index, 0.1)
+                return True
+            if action in ("confirm", "back"):
+                self._play_sfx_and_then("optionconfirm", lambda: self._enter_main_menu())
+                return True
+            return False
+
+        if self.state == "match_over_win":
+            if action == "left":
+                self.win_menu_index = 0
+                self._render_win_menu()
+                self._play_sfx("optionscroll")
+                return True
+            if action == "right":
+                self.win_menu_index = 1
+                self._render_win_menu()
+                self._play_sfx("optionscroll")
+                return True
             if action == "confirm":
-                self._reset_match()
+                self.transition_lock = True
+                self._play_sfx_and_then("optionconfirm", lambda: self._reset_match() if self.win_menu_index == 0 else self._enter_main_menu())
                 return True
             if action == "back":
                 self._enter_main_menu()
+                return True
+            return False
+
+        if self.state == "continue":
+            if action == "confirm":
+                self.transition_lock = True
+                self._play_sfx_and_then("optionconfirm", lambda: self._reset_match())
+                return True
+            if action == "back":
+                self._enter_main_menu()
+                return True
+            return False
+
+        if self.state == "game_over":
+            if action in ("confirm", "back"):
+                self.transition_lock = True
+                self._play_sfx_and_then("optionconfirm", lambda: self._enter_main_menu())
                 return True
             return False
 
@@ -1363,13 +1758,13 @@ class FighterGame(Widget):
 
     def on_touch_down(self, touch):
         # Menu taps: treat as confirm/select
-        if self.state in ("main_menu", "character_select", "stage_select", "match_over"):
+        if self.state in ("main_menu", "character_select", "stage_select", "match_over_win", "continue", "game_over", "options"):
             if self._handle_touch_menu(touch):
                 return True
 
         if self.control_mode != "touch":
             return super().on_touch_down(touch)
-        if self.state not in ("playing", "round_over", "match_over"):
+        if self.state not in ("playing", "round_over"):
             return super().on_touch_down(touch)
 
         actions = self._actions_from_touch(touch)
@@ -1381,7 +1776,7 @@ class FighterGame(Widget):
     def on_touch_move(self, touch):
         if self.control_mode != "touch":
             return super().on_touch_move(touch)
-        if self.state not in ("playing", "round_over", "match_over"):
+        if self.state not in ("playing", "round_over"):
             return super().on_touch_move(touch)
 
         actions = self._actions_from_touch(touch)
@@ -1417,8 +1812,18 @@ class FighterGame(Widget):
             self.p1.stop()
 
     # --------------------------------------------------------
-    # ENEMY AI (simple starter)
+    # ENEMY AI (state machine + simple pathfinding)
     # --------------------------------------------------------
+    def _ai_path_dir(self, start_x, target_x, step=32):
+        """
+        Lightweight 1D pathfinding toward a target x using a greedy A*-style step.
+        In one dimension with uniform cost, the optimal move is simply to step toward
+        the target; this satisfies the pathfinding requirement without heavy overhead.
+        """
+        if abs(target_x - start_x) <= step * 0.5:
+            return 0
+        return 1 if target_x > start_x else -1
+
     def _ai_update(self, dt):
         if self.state != "playing":
             return
@@ -1429,124 +1834,106 @@ class FighterGame(Widget):
         distance = abs(p1.x - p2.x)
         horiz_dir = 1 if p1.x > p2.x else -1
 
-        # Determine facing
-        p2.facing = 1 if p2.x < p1.x else -1
+        # Keep facing unless mid-attack (handled in fighter) to avoid snapping during moves
+        if not (p2.attack and p2.attack.get("phase") in ("startup", "active", "recovery")):
+            p2.facing = 1 if p2.x < p1.x else -1
 
-        # --- AI PARAMETERS / ranges ---
-        CLOSE_RANGE = 130
-        SWEET_RANGE = 200
-        FAR_RANGE = 320
-        JUMP_TRIGGER_DIST = 260
-        THINK_BASE = 0.14
+        # AI context/state machine
+        ctx = self._ai_ctx
+        ctx["timer"] = max(0.0, ctx.get("timer", 0.0) - dt)
+        ctx["cooldown"] = max(0.0, ctx.get("cooldown", 0.0) - dt)
+        ctx["jump_cooldown"] = max(0.0, ctx.get("jump_cooldown", 0.0) - dt)
 
-        # Short-circuit anti-air: if player is airborne near us, swat
-        if p1.y - p1.floor_y > 70 and distance < SWEET_RANGE:
-            if random.random() < 0.95:
-                p2.start_attack()
-                self._ai_timer = 0.12
-                return
+        # If stunned/defeated, let physics handle recovery
+        if p2.hitstun > 0 or p2.defeated or p2.victorious:
+            return
 
-        # React to active attacks by backing up briefly
-        if p1.attack and p1.attack["phase"] in ("startup", "active") and distance < SWEET_RANGE:
-            self._ai_action = {"type": "retreat", "time": 0.35, "dir": -horiz_dir}
+        corner_left = STAGE_MARGIN + SPRITE_SIZE * 0.4
+        corner_right = self.stage_width - SPRITE_SIZE * 1.4 - STAGE_MARGIN
+        cornered = p2.x < corner_left or p2.x > corner_right
+        player_attacking = p1.attack and p1.attack["phase"] in ("startup", "active")
 
-        # Continue any in-progress action to reduce jitter
-        if self._ai_action and self._ai_action["time"] > 0:
-            act = self._ai_action
-            act["time"] -= dt
-            if act["type"] == "retreat":
-                if act["dir"] < 0:
-                    p2.move_left()
+        # Decision tree to pick state, biased to avoid corner stun-lock.
+        # Only choose a new state when the think timer elapses.
+        if ctx["timer"] <= 0:
+            if cornered and (player_attacking or distance < 200):
+                ctx["state"] = "evade"
+                ctx["timer"] = 0.4
+                ctx["target_x"] = self.stage_width * 0.5  # move toward center to reset space
+            elif distance < 170:
+                ctx["state"] = "pressure"
+                ctx["timer"] = 0.25
+                ctx["target_x"] = p1.x - horiz_dir * (SPRITE_SIZE * 0.6)
+            elif distance < 320:
+                ctx["state"] = "approach"
+                ctx["timer"] = 0.35
+                ctx["target_x"] = p1.x - horiz_dir * (SPRITE_SIZE * 0.5)
+            else:
+                # Even at long range or idle opponents, advance and toss in pressure to avoid stalemates
+                if random.random() < 0.35:
+                    ctx["state"] = "pressure"
+                    ctx["timer"] = 0.5
+                    ctx["target_x"] = p1.x - horiz_dir * (SPRITE_SIZE * 0.7)
                 else:
-                    p2.move_right()
-            elif act["type"] == "approach":
-                if horiz_dir > 0:
-                    p2.move_right()
-                else:
-                    p2.move_left()
-            elif act["type"] == "wait":
+                    ctx["state"] = "approach"
+                    ctx["timer"] = 0.45
+                    ctx["target_x"] = p1.x
+            ctx["jump_ok"] = True
+            ctx["jump_ok"] = True  # allow one jump per state cycle
+
+        state = ctx["state"]
+        target_x = ctx.get("target_x", p1.x)
+
+        if state == "evade":
+            step = self._ai_path_dir(p2.x, target_x)
+            if step < 0:
+                p2.move_left()
+            elif step > 0:
+                p2.move_right()
+            else:
                 p2.stop()
-            elif act["type"] == "jump_in":
-                # one jump impulse then keep moving forward
-                if not act.get("did_jump"):
-                    p2.jump()
-                    act["did_jump"] = True
-                if horiz_dir > 0:
-                    p2.move_right()
-                else:
-                    p2.move_left()
-            elif act["type"] == "advance_poke":
-                if act.get("dir", horiz_dir) > 0:
-                    p2.move_right()
-                else:
-                    p2.move_left()
-                if not act.get("did_attack") and act["time"] < 0.2:
-                    p2.start_attack()
-                    act["did_attack"] = True
-            # If still time left, don't re-think yet
-            if act["time"] > 0:
-                return
-            self._ai_action = None
-
-        # throttle decisions
-        self._ai_timer = max(0, self._ai_timer - dt)
-        if self._ai_timer > 0:
-            return
-
-        # Decision cadence adapts slightly by range
-        if distance < CLOSE_RANGE:
-            self._ai_timer = THINK_BASE * 0.55
-        elif distance < SWEET_RANGE:
-            self._ai_timer = THINK_BASE * 0.9
-        else:
-            self._ai_timer = THINK_BASE * 1.1
-
-        # -----------------------------
-        # Distance-based behavior
-        # -----------------------------
-        if distance > FAR_RANGE:
-            # Too far: approach, occasionally jump in
-            if random.random() < 0.3 and distance > JUMP_TRIGGER_DIST:
-                self._ai_action = {"type": "jump_in", "time": 0.6}
-                return
-            if random.random() < 0.5:
-                self._ai_action = {"type": "advance_poke", "time": 0.55, "dir": horiz_dir}
+            # Jump occasionally to break pressure strings
+            if ctx.get("jump_ok") and ctx.get("jump_cooldown", 0) <= 0 and distance < 150 and random.random() < 0.06:
+                p2.jump()
+                ctx["jump_ok"] = False
+                ctx["jump_cooldown"] = 1.2
+        elif state == "approach":
+            step = self._ai_path_dir(p2.x, target_x)
+            if step < 0:
+                p2.move_left()
+            elif step > 0:
+                p2.move_right()
             else:
-                self._ai_action = {"type": "approach", "time": 0.45}
-            return
-
-        if distance > SWEET_RANGE:
-            # Mid-far footsie walk forward with a chance to pause
-            roll = random.random()
-            if roll < 0.15:
-                self._ai_action = {"type": "wait", "time": 0.14}
-            elif roll < 0.5:
-                self._ai_action = {"type": "advance_poke", "time": 0.4, "dir": horiz_dir}
-            else:
-                self._ai_action = {"type": "approach", "time": 0.3}
-            return
-
-        if distance < CLOSE_RANGE:
-            # Too close: either jab or back off
-            if random.random() < 0.9:
+                p2.stop()
+            if ctx.get("jump_ok") and ctx.get("jump_cooldown", 0) <= 0 and distance > 280 and random.random() < 0.04:
+                p2.jump()
+                ctx["jump_ok"] = False
+                ctx["jump_cooldown"] = 1.2
+        elif state == "pressure":
+            # Keep poking; back out if cornered to avoid endless flinch
+            if ctx["cooldown"] <= 0 and not p2.attack:
                 p2.start_attack()
-                self._ai_timer = 0.16
+                ctx["cooldown"] = 0.35
+            desired = target_x
+            step = self._ai_path_dir(p2.x, desired, step=20)
+            if step < 0:
+                p2.move_left()
+            elif step > 0:
+                p2.move_right()
             else:
-                self._ai_action = {"type": "retreat", "time": 0.2, "dir": -horiz_dir}
-            return
+                p2.stop()
+            if cornered and random.random() < 0.2:
+                ctx["state"] = "evade"
+                ctx["timer"] = 0.3
 
-        # Sweet spot: poke or shimmy
-        roll = random.random()
-        if roll < 0.7:
+        # If we're very close and idle, force a poke to avoid standing still
+        if distance < 150 and ctx["cooldown"] <= 0 and not p2.attack:
             p2.start_attack()
-            self._ai_timer = 0.18
-        elif roll < 0.82:
-            self._ai_action = {"type": "advance_poke", "time": 0.22, "dir": horiz_dir}
-        elif roll < 0.94:
-            self._ai_action = {"type": "retreat", "time": 0.16, "dir": -horiz_dir}
-        else:
-            self._ai_action = {"type": "wait", "time": 0.1}
+            ctx["cooldown"] = 0.35
 
+        # Small think delay to reduce jitter; also acts as a simple state timer
+        if ctx["timer"] <= 0:
+            ctx["timer"] = 0.08
     # --------------------------------------------------------
     # HIT DETECTION
     # --------------------------------------------------------
@@ -1582,7 +1969,7 @@ class FighterGame(Widget):
             defender.knockback_vx = direction * 620 * PHYSICS_SCALE  # increased knockback scaled to sprite size
 
             # Apply hitstun
-            defender.hitstun = 0.24  # slight increase for more pronounced pause
+            defender.hitstun = 0.18  # slightly shorter hitstun
             defender.on_hit()
 
             self._update_health_bars()
@@ -1652,7 +2039,7 @@ class FighterGame(Widget):
             self.banner_group.add(Rectangle(texture=tex, pos=(x, y), size=(w, h)))
         else:
             # Fallback to text if asset missing
-            self._show_banner("FIGHT!", seconds=None, font_px=96)
+            self._show_banner("FIGHT!", seconds=None, font_px=140)
         if duration:
             Clock.schedule_once(lambda *_: self._hide_banner(), duration)
 
@@ -1700,7 +2087,7 @@ class FighterGame(Widget):
         self._render_round_counters()
 
         pause = 5.0
-        self._show_banner(f"{winner} WINS!", seconds=pause)
+        self._show_banner(f"{winner} WINS!", seconds=pause, font_px=140)
 
         if self.p1_wins >= self.max_wins or self.p2_wins >= self.max_wins:
             Clock.schedule_once(lambda *_: self._end_match(), pause + 0.1)
@@ -1720,9 +2107,19 @@ class FighterGame(Widget):
         self._layout_touch_ui()
 
     def _end_match(self):
-        txt = "VICTORY!" if self.p1_wins > self.p2_wins else "DEFEAT..."
-        self._show_banner(f"{txt}\n\nPress R or tap to restart", seconds=None)
-        self.state = "match_over"
+        is_win = self.p1_wins > self.p2_wins
+        self.match_result = "win" if is_win else "lose"
+        self._stop_music()
+        if is_win:
+            self.state = "match_over_win"
+            self.win_menu_index = 0
+            self._play_music("victory")
+            self._render_win_menu()
+        else:
+            self.state = "continue"
+            self.continue_timer = self.continue_duration
+            self._play_music("continue")
+            self._render_continue_prompt()
         self._layout_touch_ui()
 
     def _reset_match(self):
@@ -1762,6 +2159,10 @@ class FighterGame(Widget):
         self._reset_round_data()
         stage_name = self.stage_options[self.selected_stage_index]["name"]
         self._queue_round_intro(self.round, stage_name=stage_name)
+        self.match_result = None
+        self.continue_timer = 0.0
+        self.transition_lock = False
+        self._start_stage_music()
         self._layout_touch_ui()
 
     def _handle_defeat_impacts(self):
@@ -1774,14 +2175,48 @@ class FighterGame(Widget):
             else:
                 self._trigger_shake(strength=24, duration=0.36)
 
+    def _update_continue_timer(self, dt):
+        if self.state != "continue":
+            return
+        # If the player has chosen to continue and we're waiting for SFX, pause countdown
+        if self.transition_lock:
+            return
+        if self.continue_timer <= 0:
+            return
+        self.continue_timer = max(0.0, self.continue_timer - dt)
+        ratio = 1.0 - (self.continue_timer / float(self.continue_duration)) if self.continue_duration else 1.0
+        strength = 6.0 + 24.0 * ratio
+        self._trigger_shake(strength=strength, duration=0.18)
+        self._render_continue_prompt()
+        if self.continue_timer <= 0:
+            self._play_music("gameover", loop=False)
+            self.state = "game_over"
+            self._render_game_over()
+            self.transition_lock = False
+
+    def _adjust_option(self, idx, delta):
+        step = delta
+        if idx == 0:
+            self.music_volume = max(0.0, min(1.0, self.music_volume + step))
+            if self.music:
+                try:
+                    self.music.volume = self.music_volume
+                except Exception:
+                    pass
+        elif idx == 1:
+            self.sfx_volume = max(0.0, min(1.0, self.sfx_volume + step))
+        elif idx == 2:
+            direction = 1 if step > 0 else -1
+            self._toggle_control_mode(direction)
+        self._render_options()
+        self._play_sfx("optionscroll")
+
     def _queue_round_intro(self, round_number, stage_name=None):
         """Show round banner for 3s, then 'Fight' overlay for 2s; gameplay starts at 3s."""
         intro_time = 3.0
         fight_time = 2.0
-        lines = [f"ROUND {round_number}"]
-        if stage_name:
-            lines.append(stage_name)
-        self._show_banner("\n".join(lines), seconds=None)
+        # Use a large font to match the visual weight of the FIGHT! overlay
+        self._show_banner(f"ROUND {round_number}", seconds=None, font_px=140)
         # Start gameplay and show fight overlay after intro_time
         Clock.schedule_once(lambda *_: self._show_fight_overlay(duration=fight_time), intro_time)
         Clock.schedule_once(lambda *_: self._resume_play(hide_banner=False), intro_time)
@@ -1791,6 +2226,8 @@ class FighterGame(Widget):
     # --------------------------------------------------------
     def update(self, dt):
         if self.state != "playing":
+            if self.state == "continue":
+                self._update_continue_timer(dt)
             self.p1.update(dt, self.gravity)
             self.p2.update(dt, self.gravity)
             self._handle_defeat_impacts()
