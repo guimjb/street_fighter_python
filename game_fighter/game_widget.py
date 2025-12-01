@@ -175,7 +175,8 @@ class FighterGame(Widget):
         self.current_stage_track = None
         self._music_on_stop = None
         self.sound_cache = {}
-        self.music_volume = 0.8
+        self.music_base = 0.5  # new max baseline for music loudness
+        self.music_volume = self.music_base * 0.8  # default to 80% of new base
         self.sfx_volume = 0.8
         self.music_library = {
             "title": os.path.join(ASSETS_DIR, "projectsounds", "track", "titleTheme.mp3"),
@@ -192,6 +193,11 @@ class FighterGame(Widget):
             "optionscroll": os.path.join(ASSETS_DIR, "projectsounds", "effect", "optionscroll.wav"),
             "optionconfirm": os.path.join(ASSETS_DIR, "projectsounds", "effect", "optionconfirm.wav"),
             "gamestart": os.path.join(ASSETS_DIR, "projectsounds", "effect", "gamestart.wav"),
+            "hit1": os.path.join(ASSETS_DIR, "projectsounds", "characters", "hit1.wav"),
+            "hit2": os.path.join(ASSETS_DIR, "projectsounds", "characters", "hit2.wav"),
+            "hit3": os.path.join(ASSETS_DIR, "projectsounds", "characters", "hit3.wav"),
+            "floorhit": os.path.join(ASSETS_DIR, "projectsounds", "characters", "floorhit.wav"),
+            "death": os.path.join(ASSETS_DIR, "projectsounds", "characters", "ryuken-uggh.mp3"),
         }
         self.continue_duration = 10.0
         self.continue_timer = 0.0
@@ -339,7 +345,7 @@ class FighterGame(Widget):
         path = self.sfx_library.get(name)
         if not path or not os.path.exists(path):
             return
-        snd = SoundLoader.load(path)
+        snd = self._load_sound(path)
         if not snd:
             return
         try:
@@ -350,6 +356,15 @@ class FighterGame(Widget):
             snd.play()
         except Exception:
             pass
+
+    def _play_random_hit_sfx(self):
+        choices = ["hit1", "hit2", "hit3"]
+        random.shuffle(choices)
+        for key in choices:
+            path = self.sfx_library.get(key)
+            if path and os.path.exists(path):
+                self._play_sfx(key)
+                break
 
     def _play_sfx_and_then(self, name, on_complete):
         """Play an SFX and run callback after it finishes (or immediately if unavailable)."""
@@ -1202,8 +1217,24 @@ class FighterGame(Widget):
         self._center_label("CONTINUE?", top_y, font_px=120, color=(1, 1, 1, 1))
         remaining = max(0.0, self.continue_timer)
         timer_text = f"{max(0, math.ceil(remaining))}"
-        self._center_label(timer_text, self.height * 0.48, font_px=140, color=(1, 0.6, 0.4, 1))
-        self._center_label("Press Enter/Space to continue or tap screen", self.height * 0.32, font_px=48, color=(1, 1, 1, 0.8))
+        self._center_label(timer_text, self.height * 0.54, font_px=140, color=(1, 0.6, 0.4, 1))
+
+        btn_w = min(self.width * 0.24, 360)
+        btn_h = 110
+        gap = max(self.width * 0.04, 40)
+        start_x = (self.width - (btn_w * 2 + gap)) / 2
+        btn_y = self.height * 0.34
+        labels = [("Give Up", "give_up"), ("Stand Strong", "stand_strong")]
+        self._continue_buttons = {}
+        for idx, (text, key) in enumerate(labels):
+            x = start_x + idx * (btn_w + gap)
+            self.ui_group.add(Color(0.85, 0.35, 0.25, 0.95))
+            self.ui_group.add(Rectangle(pos=(x, btn_y), size=(btn_w, btn_h)))
+            self._continue_buttons[key] = (x, btn_y, btn_w, btn_h)
+            tex = self._measure_label(text, 58)
+            self._draw_label(text, x + (btn_w - tex.width) / 2, btn_y + (btn_h - tex.height) / 2, font_px=58)
+
+        self._center_label("Choose an option before time runs out", self.height * 0.22, font_px=44, color=(1, 1, 1, 0.85))
 
     def _render_game_over(self):
         self._clear_ui()
@@ -1242,7 +1273,10 @@ class FighterGame(Widget):
                     self._draw_label(txt, x + (btn_w - tex.width) / 2, y + (btn_h - tex.height) / 2, font_px=64)
                     key = (idx, "plus" if is_plus else "minus")
                     self._options_hitboxes[key] = (x, y, btn_w, btn_h)
-                pct = int(round(val * 100))
+                if row["type"] == "music":
+                    pct = int(round((val / max(1e-6, self.music_base)) * 100))
+                else:
+                    pct = int(round(val * 100))
                 self._draw_label(f"{pct}%", self.width * 0.66, y + (btn_h - 48) / 2, font_px=48, color=(1, 1, 1, 0.9))
             else:
                 # Control mode toggle
@@ -1310,9 +1344,9 @@ class FighterGame(Widget):
 
         # Action buttons (right side)
         act_spacing = size * 1.2
-        start_x = w - pad - size * 2.6
+        start_x = w - pad - size * 2.4
         act_y = bottom + size * 1.0
-        actions = [("punch", "P"), ("kick", "K"), ("special", "S")]
+        actions = [("punch", "P")]
         for idx, (action, label) in enumerate(actions):
             px = start_x + idx * act_spacing
             py = act_y
@@ -1460,9 +1494,19 @@ class FighterGame(Widget):
             return False
 
         if self.state == "continue":
-            self.transition_lock = True
-            self._play_sfx_and_then("optionconfirm", lambda: self._reset_match())
-            return True
+            if self._continue_buttons:
+                for key, rect in self._continue_buttons.items():
+                    x, y, w, h = rect
+                    if x <= touch.x <= x + w and y <= y + h:
+                        if key == "give_up":
+                            self.transition_lock = True
+                            self._play_sfx_and_then("optionconfirm", lambda: self._play_music("gameover", loop=False) or self._enter_main_menu())
+                        else:
+                            self.transition_lock = True
+                            self._play_sfx_and_then("optionconfirm", lambda: self._reset_match())
+                        return True
+            return False
+            return False
 
         if self.state == "game_over":
             self.transition_lock = True
@@ -1582,13 +1626,6 @@ class FighterGame(Widget):
             return False
 
         if self.state == "continue":
-            if action == "confirm":
-                self.transition_lock = True
-                self._play_sfx_and_then("optionconfirm", lambda: self._reset_match())
-                return True
-            if action == "back":
-                self._enter_main_menu()
-                return True
             return False
 
         if self.state == "game_over":
@@ -1748,7 +1785,7 @@ class FighterGame(Widget):
             if became_active:
                 if action == "up":
                     self._queue_jump()
-                elif action in ("punch", "kick"):
+                elif action in ("punch",):
                     self._queue_attack()
 
         if actions:
@@ -1875,10 +1912,10 @@ class FighterGame(Widget):
                 ctx["target_x"] = p1.x - horiz_dir * (SPRITE_SIZE * 0.5)
             else:
                 # Even at long range or idle opponents, advance and toss in pressure to avoid stalemates
-                if random.random() < 0.35:
+                if random.random() < 0.20:
                     ctx["state"] = "pressure"
                     ctx["timer"] = 0.5
-                    ctx["target_x"] = p1.x - horiz_dir * (SPRITE_SIZE * 0.7)
+                    ctx["target_x"] = p1.x
                 else:
                     ctx["state"] = "approach"
                     ctx["timer"] = 0.45
@@ -1920,8 +1957,8 @@ class FighterGame(Widget):
                 # Face the player before throwing a poke
                 p2.facing = 1 if p2.x < p1.x else -1
                 p2.start_attack()
-                ctx["cooldown"] = 0.35
-            desired = target_x
+                ctx["cooldown"] = 1.5  # add larger cooldown between AI attacks
+            desired = p1.x  # walk directly toward the player while pressuring
             step = self._ai_path_dir(p2.x, desired, step=20)
             if step < 0:
                 p2.move_left()
@@ -1937,17 +1974,17 @@ class FighterGame(Widget):
         if ctx.get("idle", 0.0) > 1.5 and not p2.attack:
             ctx["state"] = "pressure"
             ctx["timer"] = 0.4
-            ctx["target_x"] = p1.x - horiz_dir * (SPRITE_SIZE * 0.6)
+            ctx["target_x"] = p1.x
             ctx["idle"] = 0.0
             ctx["jump_ok"] = False
             p2.facing = 1 if p2.x < p1.x else -1
             p2.start_attack()
-            ctx["cooldown"] = 0.35
+            ctx["cooldown"] = 1.2
 
         # If we're very close and idle, force a poke to avoid standing still
         if distance < 150 and ctx["cooldown"] <= 0 and not p2.attack:
             p2.start_attack()
-            ctx["cooldown"] = 0.35
+            ctx["cooldown"] = 1.4
 
         # Small think delay to reduce jitter; also acts as a simple state timer
         if ctx["timer"] <= 0:
@@ -1987,7 +2024,8 @@ class FighterGame(Widget):
             defender.knockback_vx = direction * 620 * PHYSICS_SCALE  # increased knockback scaled to sprite size
 
             # Apply hitstun
-            defender.hitstun = 0.18  # slightly shorter hitstun
+            defender.hitstun = 0.22  # slightly longer hitstun for more pause
+            self._play_random_hit_sfx()
             defender.on_hit()
 
             self._update_health_bars()
@@ -1995,6 +2033,7 @@ class FighterGame(Widget):
             if defender.hp <= 0:
                 # Extra knockback on defeat
                 defender.knockback_vx = direction * 1800 * PHYSICS_SCALE
+                self._play_sfx("death")
                 defender.on_defeat()
                 attacker.on_victory()
                 self._end_round("P1" if defender is self.p2 else "P2")
@@ -2189,8 +2228,10 @@ class FighterGame(Widget):
             if not event:
                 continue
             if event == "first":
+                self._play_sfx("floorhit")
                 self._trigger_shake(strength=18, duration=0.28)
             else:
+                self._play_sfx("floorhit")
                 self._trigger_shake(strength=24, duration=0.36)
 
     def _update_continue_timer(self, dt):
@@ -2215,7 +2256,7 @@ class FighterGame(Widget):
     def _adjust_option(self, idx, delta):
         step = delta
         if idx == 0:
-            self.music_volume = max(0.0, min(1.0, self.music_volume + step))
+            self.music_volume = max(0.0, min(self.music_base, self.music_volume + step))
             if self.music:
                 try:
                     self.music.volume = self.music_volume
@@ -2286,14 +2327,16 @@ class FighterGame(Widget):
         self._sync_draw()
 
     def _start_positions(self):
-        """Place fighters at ~15% and ~85% of the screen width."""
+        """Place fighters symmetrically 35 px from stage center."""
         from game_fighter.constants import STAGE_MARGIN
 
         win_w = self.stage_width
         scale_ratio = self._compute_sprite_scale() / float(SPRITE_SCALE)
         eff_size = SPRITE_SIZE * scale_ratio
-        left = max(STAGE_MARGIN, win_w * 0.15 - eff_size * 0.5)
-        right = min(win_w - eff_size - STAGE_MARGIN, win_w * 0.85 - eff_size * 0.5)
+        center = win_w * 0.5
+        offset = 260
+        left = max(STAGE_MARGIN, center - offset - eff_size * 0.5)
+        right = min(win_w - eff_size - STAGE_MARGIN, center + offset - eff_size * 0.5)
         return left, right
 
     def _separate_fighters(self):
