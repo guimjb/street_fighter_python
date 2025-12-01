@@ -137,6 +137,7 @@ class FighterGame(Widget):
         self.current_stage_key = self.stage_options[self.selected_stage_index]["key"]
         self.p1_name = "P1"
         self.p2_name = "P2"
+        self.show_p2_health_bar = False  # temporarily hide second health bar
 
         # Drawables
         self.fx = InstructionGroup()
@@ -764,37 +765,53 @@ class FighterGame(Widget):
         self.hud_group.clear()
         use_textures = self.hp_back_tex is not None and self.hp_front_tex is not None
         self.bar_height = 80  # fallback height if textures are missing
+        self.hp1_base = None
+        self.hp1_bar = None
+        self.hp2_base = None
+        self.hp2_bar = None
         # Base bars (background)
         if use_textures:
             self.hud_group.add(Color(1, 1, 1, 1))
             self.hp1_base = Rectangle(texture=self.hp_back_tex)
             self.hud_group.add(self.hp1_base)
-            self.hud_group.add(Color(1, 1, 1, 1))
-            self.hp2_base = Rectangle(texture=self.hp_back_tex)
-            self.hud_group.add(self.hp2_base)
+            if self.show_p2_health_bar:
+                self.hud_group.add(Color(1, 1, 1, 1))
+                self.hp2_base = Rectangle(texture=self.hp_back_tex)
+                self.hud_group.add(self.hp2_base)
+            else:
+                self.hp2_base = Rectangle(texture=self.hp_back_tex)
         else:
             self.hud_group.add(Color(0.65, 0.1, 0.1, 1))
             self.hp1_base = Rectangle()
             self.hud_group.add(self.hp1_base)
-            self.hud_group.add(Color(0.65, 0.1, 0.1, 1))
-            self.hp2_base = Rectangle()
-            self.hud_group.add(self.hp2_base)
+            if self.show_p2_health_bar:
+                self.hud_group.add(Color(0.65, 0.1, 0.1, 1))
+                self.hp2_base = Rectangle()
+                self.hud_group.add(self.hp2_base)
+            else:
+                self.hp2_base = Rectangle()
 
         # Foreground bars (fill)
         if use_textures:
             self.hud_group.add(Color(1, 1, 1, 1))
             self.hp1_bar = Rectangle(texture=self.hp_front_tex)
             self.hud_group.add(self.hp1_bar)
-            self.hud_group.add(Color(1, 1, 1, 1))
-            self.hp2_bar = Rectangle(texture=self.hp_front_tex)
-            self.hud_group.add(self.hp2_bar)
+            if self.show_p2_health_bar:
+                self.hud_group.add(Color(1, 1, 1, 1))
+                self.hp2_bar = Rectangle(texture=self.hp_front_tex)
+                self.hud_group.add(self.hp2_bar)
+            else:
+                self.hp2_bar = None
         else:
             self.hud_group.add(Color(0.98, 0.9, 0.1, 1))
             self.hp1_bar = Rectangle()
             self.hud_group.add(self.hp1_bar)
-            self.hud_group.add(Color(0.98, 0.9, 0.1, 1))
-            self.hp2_bar = Rectangle()
-            self.hud_group.add(self.hp2_bar)
+            if self.show_p2_health_bar:
+                self.hud_group.add(Color(0.98, 0.9, 0.1, 1))
+                self.hp2_bar = Rectangle()
+                self.hud_group.add(self.hp2_bar)
+            else:
+                self.hp2_bar = None
 
         # Timer
         self.timer_color = Color(1, 1, 1, 1)
@@ -853,33 +870,62 @@ class FighterGame(Widget):
         ratio_p1 = max(0.0, min(1.0, self.p1.hp / self.p1.max_hp))
         ratio_p2 = max(0.0, min(1.0, self.p2.hp / self.p2.max_hp))
 
-        # Bases anchored to center gap
-        self.hp1_base.pos = (center_x - gap / 2 - half_w, top_margin)
-        self.hp1_base.size = (half_w, bar_h)
-        self.hp2_base.pos = (center_x + gap / 2, top_margin)
-        self.hp2_base.size = (half_w, bar_h)
+        if self.show_p2_health_bar:
+            # Bases anchored to center gap
+            self.hp1_base.pos = (center_x - gap / 2 - half_w, top_margin)
+            self.hp1_base.size = (half_w, bar_h)
+            self.hp2_base.pos = (center_x + gap / 2, top_margin)
+            self.hp2_base.size = (half_w, bar_h)
 
-        # Foreground bars shrink toward center
-        p1_w = half_w * ratio_p1
-        p2_w = half_w * ratio_p2
-        self.hp1_bar.pos = (center_x - gap / 2 - p1_w, top_margin)
-        self.hp1_bar.size = (p1_w, bar_h)
-        self.hp2_bar.pos = (center_x + gap / 2, top_margin)
-        self.hp2_bar.size = (p2_w, bar_h)
+            # Foreground bars shrink toward center
+            p1_w = half_w * ratio_p1
+            p2_w = half_w * ratio_p2
+            self.hp1_bar.pos = (center_x - gap / 2 - p1_w, top_margin)
+            self.hp1_bar.size = (p1_w, bar_h)
+            self.hp2_bar.pos = (center_x + gap / 2, top_margin)
+            self.hp2_bar.size = (p2_w, bar_h)
 
-        if self.hp_back_tex:
-            self.hp1_base.texture = self.hp_back_tex
-            self.hp1_base.tex_coords = self._health_texcoords(self.hp_back_tex, 1.0, anchor="right")
-            self.hp2_base.texture = self.hp_back_tex
-            self.hp2_base.tex_coords = self._health_texcoords(self.hp_back_tex, 1.0, anchor="left")
+            if self.hp_back_tex:
+                self.hp1_base.texture = self.hp_back_tex
+                self.hp1_base.tex_coords = self._health_texcoords(self.hp_back_tex, 1.0, anchor="right")
+                self.hp2_base.texture = self.hp_back_tex
+                self.hp2_base.tex_coords = self._health_texcoords(self.hp_back_tex, 1.0, anchor="left")
 
-        if self.hp_front_tex:
-            self.hp1_bar.texture = self.hp_front_tex
-            self.hp1_bar.tex_coords = self._health_texcoords(self.hp_front_tex, ratio_p1, anchor="right")
+            if self.hp_front_tex:
+                self.hp1_bar.texture = self.hp_front_tex
+                self.hp1_bar.tex_coords = self._health_texcoords(self.hp_front_tex, ratio_p1, anchor="right")
             self.hp2_bar.texture = self.hp_front_tex
             self.hp2_bar.tex_coords = self._health_texcoords(self.hp_front_tex, ratio_p2, anchor="left")
+        else:
+            # Single-bar mode: shared bar centered; crop left for P1 damage, right for P2 damage
+            full_w = half_w
+            left_half = full_w / 2.0
+            self.hp1_base.pos = (center_x - full_w / 2.0, top_margin)
+            self.hp1_base.size = (full_w, bar_h)
 
-        # Timer in the gap, centered vertically on the bar
+            left_loss = left_half * (1.0 - ratio_p1)
+            right_loss = left_half * (1.0 - ratio_p2)
+            visible_w = max(0.0, full_w - left_loss - right_loss)
+            self.hp1_bar.pos = (center_x - full_w / 2.0 + left_loss, top_margin)
+            self.hp1_bar.size = (visible_w, bar_h)
+
+            # Virtual right-half rect for names/pips
+            self.hp2_base.pos = (center_x, top_margin)
+            self.hp2_base.size = (left_half, bar_h)
+
+            if self.hp_back_tex:
+                self.hp1_base.texture = self.hp_back_tex
+                self.hp1_base.tex_coords = self._health_texcoords(self.hp_back_tex, 1.0, anchor="left")
+
+            if self.hp_front_tex:
+                u0, v0 = self.hp_front_tex.uvpos
+                us, vs = self.hp_front_tex.uvsize
+                u_start = u0 + us * (left_loss / full_w)
+                u_end = u0 + us * (1.0 - right_loss / full_w)
+                self.hp1_bar.texture = self.hp_front_tex
+                self.hp1_bar.tex_coords = (u_start, v0, u_end, v0, u_end, v0 + vs, u_start, v0 + vs)
+
+        # Timer centered below the bar
         self._render_timer(top_margin, bar_h, gap)
         self._render_names(top_margin)
         self._render_round_counters(top_margin)
@@ -897,7 +943,7 @@ class FighterGame(Widget):
         lbl.refresh()
         tex = lbl.texture
         x = (self.width - tex.width) / 2
-        y = top_margin + (bar_h - tex.height) / 2
+        y = top_margin - tex.height - 10
         self.timer_rect.texture = tex
         self.timer_rect.pos = (x, y)
         self.timer_rect.size = tex.size
@@ -915,21 +961,30 @@ class FighterGame(Widget):
         lbl1 = CoreLabel(text=self.p1_name, **self._label_kwargs(font_px))
         lbl1.refresh()
         tex1 = lbl1.texture
-        x1 = self.hp1_base.pos[0] + (self.hp1_base.size[0] - tex1.width) / 2
+        if self.show_p2_health_bar:
+            x1 = self.hp1_base.pos[0] + (self.hp1_base.size[0] - tex1.width) / 2
+        else:
+            half = self.hp1_base.size[0] / 2.0
+            x1 = self.hp1_base.pos[0] + (half - tex1.width) / 2
         y1 = pip_y + (ball_d - tex1.height) / 2
         self.p1_name_rect.texture = tex1
         self.p1_name_rect.pos = (x1, y1)
         self.p1_name_rect.size = tex1.size
 
         # P2 name centered in its health bar
-        lbl2 = CoreLabel(text=self.p2_name, **self._label_kwargs(font_px))
-        lbl2.refresh()
-        tex2 = lbl2.texture
-        x2 = self.hp2_base.pos[0] + (self.hp2_base.size[0] - tex2.width) / 2
-        y2 = pip_y + (ball_d - tex2.height) / 2
-        self.p2_name_rect.texture = tex2
-        self.p2_name_rect.pos = (x2, y2)
-        self.p2_name_rect.size = tex2.size
+        if self.hp2_base:
+            lbl2 = CoreLabel(text=self.p2_name, **self._label_kwargs(font_px))
+            lbl2.refresh()
+            tex2 = lbl2.texture
+            if self.show_p2_health_bar:
+                x2 = self.hp2_base.pos[0] + (self.hp2_base.size[0] - tex2.width) / 2
+            else:
+                half = self.hp1_base.size[0] / 2.0
+                x2 = self.hp1_base.pos[0] + half + (half - tex2.width) / 2
+            y2 = pip_y + (ball_d - tex2.height) / 2
+            self.p2_name_rect.texture = tex2
+            self.p2_name_rect.pos = (x2, y2)
+            self.p2_name_rect.size = tex2.size
 
     def _render_round_counters(self, top_margin=None):
         if top_margin is None:
@@ -946,11 +1001,15 @@ class FighterGame(Widget):
             e.size = (ball_d, ball_d)
 
         # P2 aligned to right edge of bar
-        start_x2 = self.hp2_base.pos[0] + self.hp2_base.size[0] - ball_d
-        for idx, (c, e) in enumerate(zip(self.p2_round_colors, self.p2_round_ellipses)):
-            c.rgba = (0.98, 0.9, 0.1, 1) if idx < self.p2_wins else (0.65, 0.1, 0.1, 1)
-            e.pos = (start_x2 - idx * (ball_d + gap), y)
-            e.size = (ball_d, ball_d)
+        if self.hp2_base:
+            if self.show_p2_health_bar:
+                start_x2 = self.hp2_base.pos[0] + self.hp2_base.size[0] - ball_d
+            else:
+                start_x2 = self.hp1_base.pos[0] + self.hp1_base.size[0] - ball_d
+            for idx, (c, e) in enumerate(zip(self.p2_round_colors, self.p2_round_ellipses)):
+                c.rgba = (0.98, 0.9, 0.1, 1) if idx < self.p2_wins else (0.65, 0.1, 0.1, 1)
+                e.pos = (start_x2 - idx * (ball_d + gap), y)
+                e.size = (ball_d, ball_d)
 
     def _update_health_bars(self):
         if not self.hp1_bar:

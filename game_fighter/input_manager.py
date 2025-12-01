@@ -1,7 +1,7 @@
 class InputManager:
     """Track input actions coming from multiple sources (keyboard, touch, controller)."""
 
-    ACTIONS = ("left", "right", "up", "down", "punch", "kick", "special")
+    ACTIONS = ("left", "right", "up", "down", "punch")
 
     def __init__(self):
         self.state = {action: False for action in self.ACTIONS}
