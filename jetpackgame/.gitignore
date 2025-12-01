@@ -1,0 +1,9 @@
+#Ignore Following Files
+
+.vscode/
+env/
+.DS_Store
+dist/
+build/
+.cache/
+technews-ios/

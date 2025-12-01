@@ -1,0 +1,197 @@
+#:kivy 2.0.0
+#:import dp kivy.metrics.dp
+#:import sp kivy.metrics.sp
+#:import Window kivy.core.window.Window
+
+<FarBackground>:
+    canvas:
+        Rectangle:
+            source: root.source
+            pos: self.pos
+            size: self.size
+
+<Background>:
+    canvas:
+        Rectangle:
+            source: root.source
+            pos: self.pos
+            size: self.size
+
+<Player>:
+    size_hint: None, None
+
+<StartScreen>:
+    FloatLayout:
+        canvas.before:
+            Rectangle:
+                source: "assets/start_background.png"
+                pos: self.pos
+                size: self.size
+
+        Label:
+            text: "Jetpack Cat"
+            font_size: sp(64)
+            color: 1, 1, 1, 1
+            size_hint: None, None
+            size: self.texture_size
+            pos_hint: {"center_x": 0.5, "center_y": 0.75}
+
+        Label:
+            id: high_score_label
+            text: f"High Score: {root.high_score}"
+            font_size: sp(20)
+            color: 1, 1, 0, 1
+            size_hint: None, None
+            size: self.texture_size
+            pos_hint: {"center_x": 0.5, "center_y": 0.55}
+
+        Button:
+            text: "Start Game"
+            size_hint: 0.3, 0.1
+            pos_hint: {"center_x": 0.5, "center_y": 0.45}
+            font_size: sp(20)
+            background_color: (1, 1, 1, 0.8)
+            color: (0.2, 0.2, 0.2, 1)
+            on_release:
+                from kivy.uix.screenmanager import FadeTransition
+                app.jetpack_root.transition = FadeTransition(duration=0.5)
+                app.jetpack_root.get_screen('game').reset_game()
+                app.jetpack_root.current = "game"
+
+        Button:
+            text: "Home Menu"
+            size_hint: 0.3, 0.1
+            pos_hint: {"center_x": 0.5, "center_y": 0.35}
+            font_size: sp(20)
+            background_color: (1, 1, 1, 0.8)
+            color: (0.2, 0.2, 0.2, 1)
+            on_release:
+                app.return_to_menu()
+
+<GameScreen>:
+    FloatLayout:
+        # --- Far background ---
+        FarBackground:
+            id: bg_far1
+            x: 0
+            y: 0
+            size: root.width, root.height
+
+        FarBackground:
+            id: bg_far2
+            x: root.width
+            y: 0
+            size: root.width, root.height
+
+        # --- Foreground ---
+        Background:
+            id: bg1
+            x: 0
+            y: 0
+            size: root.width, root.height
+
+        Background:
+            id: bg2
+            x: root.width
+            y: 0
+            size: root.width, root.height
+
+        # --- Obstacles container ---
+        FloatLayout:
+            id: obstacles_layout
+            size_hint: 1, 1      # ensure it always fills the screen
+            pos: 0, 0
+
+        # --- Player ---
+        Player:
+            id: player
+            x: Window.width * 0.15
+            y: root.BRIDGE_HEIGHT if hasattr(root, 'BRIDGE_HEIGHT') else dp(100)
+
+        # --- Score (bottom right) ---
+        Label:
+            id: score_label
+            text: f"Score: {int(root.score)}"
+            font_size: sp(24)
+            size_hint: None, None
+            size: self.texture_size
+            pos_hint: {"right": 0.98, "y": 0.05}  # bottom right
+            color: 1, 1, 1, 1
+
+        # --- High Score (just above score) ---
+        Label:
+            id: high_score_label
+            text: f"High Score: {int(root.high_score)}"
+            font_size: sp(18)
+            size_hint: None, None
+            size: self.texture_size
+            pos_hint: {"right": 0.98, "y": 0.01}  # slightly below score
+            color: 1, 1, 0, 1
+
+<GameOverScreen>:
+    FloatLayout:
+        canvas.before:
+            Color:
+                rgba: 0, 0, 0, 0.7  # semi-transparent dark background
+            Rectangle:
+                pos: self.pos
+                size: self.size
+
+        Label:
+            text: "Play Again?"
+            font_size: sp(48)
+            color: 1, 1, 1, 1
+            size_hint: None, None
+            size: self.texture_size
+            pos_hint: {"center_x": 0.5, "center_y": 0.70}
+
+        Label:
+            text: "Final Score: " + str(root.final_score)
+            font_size: sp(32)
+            color: 1, 1, 0, 1
+            size_hint: None, None
+            size: self.texture_size
+            pos_hint: {"center_x": 0.5, "center_y": 0.60}
+
+        Label:
+            text: f"High Score: {root.high_score}"
+            font_size: sp(28)
+            color: 1, 1, 0, 1
+            size_hint: None, None
+            size: self.texture_size
+            pos_hint: {"center_x": 0.5, "center_y": 0.54}
+
+        Label:
+            id: new_high_label
+            text: "NEW HIGH SCORE!" if root.new_high_score else ""
+            font_size: sp(28)
+            size_hint: None, None
+            size: self.texture_size
+            pos_hint: {"center_x": 0.5, "center_y": 0.48}
+            color: 1, 0.5, 0, 1  # initial color
+
+        Button:
+            text: "Yes"
+            size_hint: 0.3, 0.1
+            pos_hint: {"center_x": 0.3, "center_y": 0.35}
+            font_size: sp(24)
+            background_color: (0.2, 1, 0.2, 1)
+            color: (1, 1, 1, 1)
+            on_release:
+                from kivy.uix.screenmanager import FadeTransition
+                app.jetpack_root.transition = FadeTransition(duration=0.5)
+                app.jetpack_root.get_screen('game').reset_game()
+                app.jetpack_root.current = "game"
+
+        Button:
+            text: "No"
+            size_hint: 0.3, 0.1
+            pos_hint: {"center_x": 0.7, "center_y": 0.35}
+            font_size: sp(24)
+            background_color: (1, 0.2, 0.2, 1)
+            color: (1, 1, 1, 1)
+            on_release:
+                from kivy.uix.screenmanager import FadeTransition
+                app.jetpack_root.transition = FadeTransition(duration=0.5)
+                app.jetpack_root.get_screen('start').high_score = root.high_score
+                app.jetpack_root.current = "start"
