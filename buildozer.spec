@@ -4,7 +4,7 @@ package.name = retrofighter
 package.domain = org.retro.fighter
 
 source.dir = .
-source.include_exts = py,png,kv,atlas,json,wav,ogg,ttf
+source.include_exts = py,png,kv,atlas,json,wav,ogg,ttf,mp3
 
 
 version = 1.0.0
