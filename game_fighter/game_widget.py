@@ -82,7 +82,8 @@ class FighterGame(Widget):
         self.stage_width = w or 1280
         # Controls
         self.control_modes = ["keyboard", "touch"]
-        self.selected_control_mode_index = 0  # default to keyboard/controller
+        # Default to touch controls so mobile devices start with on-screen buttons
+        self.selected_control_mode_index = self.control_modes.index("touch") if "touch" in self.control_modes else 0
         # Input
         self.input = InputManager()
         self.touch_actions = {}  # touch.id -> set(actions)
