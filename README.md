@@ -1,3 +1,6 @@
+The code was compiled on windows using WSL Ubuntu, a python venv was created within WSL and every required library, solution, compiler... was installed within this environment.
+
+
 # Retro System - 2D Fighter
 
 Arcade-style 2D fighter built with Kivy featuring character and stage select, sprite sheet animation, HUD, and a simple AI opponent.
