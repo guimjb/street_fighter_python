@@ -1,64 +1,46 @@
-The code was compiled on windows using WSL Ubuntu, a python venv was created within WSL and every required library, solution, compiler... was installed within this environment.
-
+The code is built from a WSL Ubuntu Python venv so desktop and Android builds stay clean and repeatable.
 
 # Retro System - 2D Fighter
 
-Arcade-style 2D fighter built with Kivy featuring character and stage select, sprite sheet animation, HUD, and a simple AI opponent.
+An arcade-style 2D fighter built with Kivy. You get character/stage select, sprite-sheet animation, HUD, a lightweight AI opponent, and touch-friendly controls out of the box.
 
-## Requirements
-- Python 3.10+
-- Runtime: `kivy` (plus `kivy_deps.sdl2`, `kivy_deps.glew`, `kivy_deps.angle` on Windows)
-- Tools: `Pillow` for the helper scripts in `tools/`
+![Gameplay](docs/gamescreenshot.png)
 
-## Quick start
+## Quick start (desktop)
 1. (Optional) create and activate a virtual environment.
-2. Install dependencies:
+2. Install deps:
    ```bash
-   pip install kivy kivy_deps.sdl2 kivy_deps.glew kivy_deps.angle pillow
+   pip install -r requirements.txt
+   # or: pip install kivy==2.2.1 pillow
    ```
-3. Launch the game from the repository root:
+3. Run from the repo root:
    ```bash
    python -m game_fighter.fighter_game
    # or: python game_fighter/fighter_game.py
    ```
 4. Set `FIGHTER_DEBUG=1` to skip menus and jump straight into a match.
 
-## Controls
-- Main menu: Enter/Space to start character select.
-- Character select: A/Left/Up and D/Right/Down to change fighter, Enter/Space to continue.
-- Stage select: A/Left/Up and D/Right/Down to change stage, Enter/Space to start.
-- During match: A or Left to move left, D or Right to move right, W or Up to jump, J or Space to attack.
-- After match: R/Enter/Space to restart, M/Esc/Backspace to return to main menu.
+## Controls (touch is the default mode)
+- Main menu: Left/Right (or tap) to toggle Keyboard/Controller vs Touch; Enter/Space or tap Play to continue.
+- Character/Stage select: A/Left/Up and D/Right/Down (or tap) to choose; Enter/Space/tap to confirm.
+- In match (keyboard): A/Left move, D/Right move, W/Up jump, J/Space attack, R restarts after match.
+- In match (controller): Stick/D-pad to move; Up or A/Y jump; B/X attack; Start/Options confirms menus.
+- In match (touch): On-screen D-pad (left) for movement/jump; right-side buttons for Punch (P), Kick (placeholder), Special (placeholder); tap match-over banner to restart.
+- After match: R/Enter/Space restart; M/Esc/Backspace return to main menu.
 
-## Project structure
-- `game_fighter/` - Python package for the game.
-  - `fighter_game.py` - Entry point that instantiates the Kivy app.
-  - `fighter_app.py` - Configures the window (1920x1080 baseline) and builds the main widget.
-  - `game_widget.py` - Core gameplay widget: menu flow, stage loading, HUD rendering, parallax layers, camera, AI logic, input handling, and the main update loop.
-  - `fighter.py` - Fighter model: movement and gravity, attack state machine, hit/hurt boxes, victory/defeat handling, and sprite swapping.
-  - `sprite_anim.py` - Sprite sheet helper that slices textures into frames, advances animations, and exposes UV coordinates.
-  - `constants.py` - Shared tuning values for sprite scale, physics scale, hitbox sizes, and stage margins.
-  - `__init__.py` - Package marker.
-- `assets/` - Game art and UI.
-  - `ryu_sprites_project/` - Ryu animation sheets (`Idle.png`, `Walk.png`, `Jump.png`, `right_punch.png`, `Hit.png`, `Defeat.png`, `victory_1/2.png`, `RyuPortrait.png`).
-  - `ken_sprites_project/` - Ken animation sheets (`idle_ken.png`, `Walking_Ken.png`, `ken_jump.png`, `ken_right_punch.png`, `ken_hit.png`, `ken_defeat.png`, `ken_victory_1/2.png`, `ken_portrait.png`).
-  - `boat_stage_project/` - Boat stage background layers and floor texture.
-  - `military_stage_project/` - Military stage background and floor.
-  - `Menu/` - Project logo and fight button art for the main menu.
-  - `Fonts/` - `StreetFont.ttf` used for HUD and banners.
-  - `text_and_health_bar/` - Atlas for UI elements and health bar.
-- `ryu_frames.json`, `ken_frames.json` - Generated frame metadata for slicing the Ryu and Ken sprite sheets; consumed by `fighter.py`.
-- `tools/` - Utility scripts.
-  - `slice_sprites.py` - Auto-slice horizontal sprite sheets into frame rectangles and emit JSON metadata.
-  - `atlas_inspect.py` - Detect non-transparent regions in an atlas to map UI pieces (prints bounding boxes).
-- `Game Showcase.mp4` - Sample gameplay footage.
-- `Individual_Game_Documentation.md` - Design and implementation notes for this fighter game.
-- `_tmp/` - Scratch space (ignored by Git; currently empty).
-- `.gitignore` - Ignores the virtual environment, VS Code settings, and `_tmp/`.
-- `.vscode/settings.json` - Local editor configuration.
-- `.venv/` - Local virtual environment (not required if you manage envs elsewhere).
+## What’s inside
+- `game_fighter/` gameplay package:
+  - `fighter_game.py` entrypoint; `fighter_app.py` Kivy app bootstrap (uses native window size); `game_widget.py` core game loop, menus, input (keyboard/controller/touch), camera, HUD, AI; `fighter.py` fighter model and collisions; `sprite_anim.py` animation helper; `input_manager.py` multi-source input aggregator; `constants.py` shared tuning values.
+- `assets/` art, UI, fonts, and stage layers.
+- `docs/` detailed module notes: `fighter_game.md`, `fighter_app.md`, `game_widget.md`, `fighter.md`, `sprite_anim.md`, `input_manager.md`, `constants.md`, `buildozer.md`.
+- `CONTROLS.txt` quick control reference.
+- `buildozer.spec` + `docs/buildozer.md` for Android packaging.
+- `tools/` helper scripts; `Game Showcase.mp4` sample footage; `Individual_Game_Documentation.md` design notes.
 
-## Development notes
-- Assets are loaded relative to the repository root; run commands from this directory so paths resolve correctly.
-- The AI is intentionally lightweight; tweak ranges and timers in `game_widget.py` to change behavior.
-- Hitboxes/hurtboxes can be adjusted in `constants.py` and per-frame metadata in the frame JSON files.
+## Building for Android
+See `docs/buildozer.md` for spec details, WSL/venv setup, required system packages, and `buildozer` commands.
+
+## Tweaking the game
+- AI pacing, hit/hurt boxes, and camera behavior live in `game_widget.py` and `constants.py`.
+- Touch overlay sizing/padding can be tuned in `game_widget.py`.
+- Add new moves by extending `fighter.py` and wiring inputs in `game_widget.py`.
