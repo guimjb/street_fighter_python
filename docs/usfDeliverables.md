@@ -8,11 +8,12 @@ Provide all of the following in your final handoff.
 - Controls guide for keyboard/controller/touch (`README.md` controls section and `CONTROLS.txt`).
 - Module documentation (`docs/`): `fighter_game.md`, `fighter_app.md`, `game_widget.md`, `fighter.md`, `sprite_anim.md`, `input_manager.md`, `constants.md`, `buildozer.md`, and this deliverables file.
 - Build configuration and scripts: `buildozer.spec`, desktop entry points (`main.py`, `game_fighter/fighter_game.py`), and any helper tools in `tools/`.
+- Prebuilt Android package: `streetfightherpython.apk` in the repo root for sideload/testing.
 
 ## Integrated System
 - Runnable builds:
   - Desktop: run via `python -m game_fighter.fighter_game` (or `python game_fighter/fighter_game.py`).
-  - Android: APK built from `buildozer.spec` (include the generated APK in the submission).
+  - Android: APK built from `buildozer.spec` (included as `streetfightherpython.apk`).
 - Installation/usage instructions: steps in `README.md` and `docs/buildozer.md` (WSL/venv setup, dependencies, build commands).
 - User manual: controls and menu flow in `README.md`/`CONTROLS.txt`.
 

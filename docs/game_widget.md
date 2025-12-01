@@ -25,8 +25,8 @@
 - `_draw_debug_boxes()`: If `show_hitboxes` is enabled, clears and redraws hurtbox/hitbox overlays using `Rectangle` primitives. Otherwise clears overlays. Called in `update`.
 
 ### HUD / UI rendering
-- `_build_hud()`: Initializes health/timer/name HUD elements and caches textures. Called during scene build.
-- `_layout_hud()`: Positions HUD elements based on window size. Called in `_on_size` and `_sync_draw` flows.
+- `_build_hud()`: Initializes health/timer/name HUD elements and caches textures. Uses a single shared front health bar: P1 damage crops from left→center, P2 damage crops from right→center while still showing both names and win pips. Called during scene build.
+- `_layout_hud()`: Positions HUD elements based on window size. Single-bar mode centers the bar and reserves right-side space for P2 name/pips; multi-bar mode still supported when enabled. Called in `_on_size` and `_sync_draw` flows.
 - `_render_timer(top_margin=None, bar_h=None, gap=None)`: Draws the round timer UI with optional layout overrides. Called when timer changes.
 - `_render_names(top_margin=None)`: Draws player names in the HUD. Called after selections and layout changes.
 - `_render_round_counters(top_margin=None)`: Renders round win indicators. Called when rounds update.
@@ -86,15 +86,15 @@
 - `_hide_banner(*args)`: Clears banner group. Used when resuming play or after timers.
 - `_show_fight_overlay(duration=2.0)`: Shows “FIGHT!” overlay for a duration, then hides. Used in round intro sequencing.
 - `_reset_round_data()`: Resets timers, HP, FX, attack state, and redraws HUD/timer/round counters.
-- `_end_round(winner)`: Sets `round_over`, updates win counts, shows banner, and schedules next round or match end.
+- `_end_round(winner)`: Sets `round_over`, updates win counts, shows banner, and schedules next round or match end. Plays the “perfect” narrator clip when the winner took no damage and holds the banner long enough for the audio.
 - `_start_next_round()`: Increments round, resets round data, queues new round intro.
 - `_resume_play(hide_banner=True)`: Hides banner (optional) and sets state to `playing`.
-- `_end_match()`: Shows victory/defeat banner and sets state to `match_over`.
+- `_end_match()`: Shows victory/defeat banner and sets state to `match_over`. Plays narrator win/lose lines for player victory/continue scene.
 - `_reset_match()`: Starts a new match (clears UI, resets selections, rebuilds scene).
 - `_apply_selection()`: Applies selected character/stage assets, reloads sprites, updates names/window title, and reloads stage assets.
 - `_start_match()`: Clears UI, resets inputs, applies selection, rebuilds scene, sets initial state/round counters, queues round intro. Called from stage select confirmation.
 - `_handle_defeat_impacts()`: Reads `defeat_landing_event` flags from fighters and triggers camera shake accordingly. Called each frame.
-- `_queue_round_intro(round_number, stage_name=None)`: Schedules “Round X” and “Fight” overlays and resumes play after intro durations.
+- `_queue_round_intro(round_number, stage_name=None)`: Round intro with narrator VO. Plays `round.mp3` + `1/2.mp3` (or `final.mp3` + `round.mp3` for round 3), keeps the banner up for the combined audio, waits an extra 0.5s, then plays `fight.mp3`, shows the FIGHT overlay, and resumes play every round.
 
 ### Main loop / layout
 - `update(dt)`: Core per-frame loop. If not playing, still updates fighters, camera shake, background cover, and draw sync. During play: applies input, updates AI, ticks timer, updates fighters, resolves collisions, handles defeat impacts, updates camera shake, debug boxes, backgrounds, and draw sync.

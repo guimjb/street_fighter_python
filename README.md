@@ -63,9 +63,14 @@ An arcade-style 2D fighter built with Kivy. You get character/stage select, spri
   - `CONTROLS.txt` quick control reference.
   - `buildozer.spec` + `docs/buildozer.md` for Android packaging.
   - `tools/` helper scripts; `Game Showcase.mp4` sample footage; `Individual_Game_Documentation.md` design notes.
+  - Narrator VO for round/fight/perfect/win/lose stored in `assets/projectsounds/narrator/`; round intros/fight overlay timing follows those audio lengths.
+  - HUD uses a shared health bar: P1 depletes left→center, P2 right→center, still showing both names/pips.
 
 ## Building for Android
 See `docs/buildozer.md` for spec details, WSL/venv setup, required system packages, and `buildozer` commands.
+
+### Prebuilt APK
+- `streetfightherpython.apk` at the repo root for immediate sideload/testing.
 
 ## Tweaking the game
 - AI pacing, hit/hurt boxes, and camera behavior live in `game_widget.py` and `constants.py`.

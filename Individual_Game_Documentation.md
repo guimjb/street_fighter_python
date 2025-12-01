@@ -32,3 +32,9 @@ a single attack with hit detection, parallax background, rounds, and victory/def
 - Enemy AI and combat interactions are placeholders.
 - No camera or stage bounds beyond window clamping.
 - Unified system integration (menu + consistent controls) pending (see Integration Plan).
+
+## Recent Changes
+- HUD now uses a shared health bar: P1 drains left→center, P2 right→center; both names/pips remain visible. Timer sits below the centered bar.
+- Narrator VO added for round intros (round + number/final callouts), fight start (with 0.5s buffer after the intro), perfect rounds, win/lose outcomes, and match continue.
+- Fight overlay now shows every round and stays up for the duration of `fight.mp3` before play resumes.
+- Prebuilt Android APK checked into the repo root (`streetfightherpython.apk`) for quick sideloading.
