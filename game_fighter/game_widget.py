@@ -199,6 +199,16 @@ class FighterGame(Widget):
             "hit3": os.path.join(ASSETS_DIR, "projectsounds", "characters", "hit3.wav"),
             "floorhit": os.path.join(ASSETS_DIR, "projectsounds", "characters", "floorhit.wav"),
             "death": os.path.join(ASSETS_DIR, "projectsounds", "characters", "ryuken-uggh.mp3"),
+            # Narrator
+            "narr_round": os.path.join(ASSETS_DIR, "projectsounds", "narrator", "round.mp3"),
+            "narr_1": os.path.join(ASSETS_DIR, "projectsounds", "narrator", "1.mp3"),
+            "narr_2": os.path.join(ASSETS_DIR, "projectsounds", "narrator", "2.mp3"),
+            "narr_3": os.path.join(ASSETS_DIR, "projectsounds", "narrator", "3.mp3"),
+            "narr_final": os.path.join(ASSETS_DIR, "projectsounds", "narrator", "final.mp3"),
+            "narr_fight": os.path.join(ASSETS_DIR, "projectsounds", "narrator", "fight.mp3"),
+            "narr_perfect": os.path.join(ASSETS_DIR, "projectsounds", "narrator", "perfect.mp3"),
+            "narr_youwin": os.path.join(ASSETS_DIR, "projectsounds", "narrator", "youwin.mp3"),
+            "narr_youlose": os.path.join(ASSETS_DIR, "projectsounds", "narrator", "youlose.mp3"),
         }
         self.continue_duration = 10.0
         self.continue_timer = 0.0
@@ -357,6 +367,34 @@ class FighterGame(Widget):
             snd.play()
         except Exception:
             pass
+
+    def _sound_length(self, name, default=1.0):
+        """Return the length of an SFX key, with a small default if unavailable."""
+        path = self.sfx_library.get(name)
+        if not path or not os.path.exists(path):
+            return default
+        snd = self._load_sound(path)
+        length = getattr(snd, "length", None) if snd else None
+        if length and length > 0:
+            return float(length)
+        return default
+
+    def _play_sfx_sequence(self, names, on_complete=None):
+        """Play a list of SFX keys sequentially."""
+        keys = [n for n in names if n]
+        if not keys:
+            if on_complete:
+                on_complete()
+            return
+
+        def _step(idx=0):
+            if idx >= len(keys):
+                if on_complete:
+                    on_complete()
+                return
+            self._play_sfx_and_then(keys[idx], lambda: _step(idx + 1))
+
+        _step()
 
     def _play_random_hit_sfx(self):
         choices = ["hit1", "hit2", "hit3"]
@@ -2197,13 +2235,20 @@ class FighterGame(Widget):
         self.state = "round_over"
         if winner == "P1":
             self.p1_wins += 1
+            winner_fighter = self.p1
         else:
             self.p2_wins += 1
+            winner_fighter = self.p2
 
         self._render_round_counters()
 
-        pause = 5.0
+        perfect = winner_fighter.hp >= getattr(winner_fighter, "max_hp", 100)
+        perfect_pad = self._sound_length("narr_perfect", default=0.0) + 0.5 if perfect else 0.0
+        pause = max(5.0, perfect_pad)
         self._show_banner(f"{winner} WINS!", seconds=pause, font_px=140)
+
+        if perfect:
+            self._play_sfx("narr_perfect")
 
         if self.p1_wins >= self.max_wins or self.p2_wins >= self.max_wins:
             Clock.schedule_once(lambda *_: self._end_match(), pause + 0.1)
@@ -2230,11 +2275,13 @@ class FighterGame(Widget):
             self.state = "match_over_win"
             self.win_menu_index = 0
             self._play_music("victory")
+            self._play_sfx("narr_youwin")
             self._render_win_menu()
         else:
             self.state = "continue"
             self.continue_timer = self.continue_duration
             self._play_music("continue")
+            self._play_sfx("narr_youlose")
             self._render_continue_prompt()
         self._layout_touch_ui()
 
@@ -2330,14 +2377,37 @@ class FighterGame(Widget):
         self._play_sfx("optionscroll")
 
     def _queue_round_intro(self, round_number, stage_name=None):
-        """Show round banner for 3s, then 'Fight' overlay for 2s; gameplay starts at 3s."""
-        intro_time = 3.0
-        fight_time = 2.0
-        # Use a large font to match the visual weight of the FIGHT! overlay
-        self._show_banner(f"ROUND {round_number}", seconds=None, font_px=140)
-        # Start gameplay and show fight overlay after intro_time
-        Clock.schedule_once(lambda *_: self._show_fight_overlay(duration=fight_time), intro_time)
-        Clock.schedule_once(lambda *_: self._resume_play(hide_banner=False), intro_time)
+        """Round intro with narrator: Round callouts then Fight, timed to audio lengths."""
+        # Decide audio/text for the round intro
+        if round_number >= 3:
+            intro_keys = ["narr_final", "narr_round"]
+            banner_text = "FINAL ROUND"
+        else:
+            intro_keys = ["narr_round", f"narr_{min(round_number, 2)}"]
+            banner_text = f"ROUND {round_number}"
+
+        round_duration = sum(self._sound_length(k, default=1.0) for k in intro_keys)
+        round_duration = max(round_duration, 1.0)
+        delay_after_intro = 0.5
+        fight_duration = max(self._sound_length("narr_fight", default=2.0), 0.5)
+
+        overlay_start = round_duration + delay_after_intro
+
+        self._show_banner(banner_text, seconds=overlay_start, font_px=140)
+        self._play_sfx_sequence(intro_keys, on_complete=lambda: Clock.schedule_once(lambda *_: start_fight_overlay(), delay_after_intro))
+
+        started = {"fight": False}
+
+        def start_fight_overlay(*_):
+            if started["fight"]:
+                return
+            started["fight"] = True
+            self._show_fight_overlay(duration=fight_duration)
+            self._play_sfx("narr_fight")
+            self._resume_play(hide_banner=False)
+
+        # Start fight overlay after narrator round callouts finish (plus delay)
+        Clock.schedule_once(start_fight_overlay, overlay_start)
 
     # --------------------------------------------------------
     # MAIN UPDATE LOOP
