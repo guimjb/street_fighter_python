@@ -6,6 +6,33 @@ An arcade-style 2D fighter built with Kivy. You get character/stage select, spri
 
 ![Gameplay](docs/gamescreenshot.png)
 
+## Project tree
+| Path | Description |
+| --- | --- |
+| `README.md` | This file. |
+| `requirements.txt` | Python dependencies for desktop/dev. |
+| `main.py` | Simple launcher for `FighterApp`. |
+| `game_fighter/` | Game package with code. |
+| `game_fighter/fighter_game.py` | Module entrypoint ([docs](docs/fighter_game.md)). |
+| `game_fighter/fighter_app.py` | Kivy `App` bootstrap ([docs](docs/fighter_app.md)). |
+| `game_fighter/game_widget.py` | Core game loop, input, UI, AI ([docs](docs/game_widget.md)). |
+| `game_fighter/fighter.py` | Fighter model, movement, collisions ([docs](docs/fighter.md)). |
+| `game_fighter/sprite_anim.py` | Sprite sheet helper ([docs](docs/sprite_anim.md)). |
+| `game_fighter/input_manager.py` | Multi-source input aggregator ([docs](docs/input_manager.md)). |
+| `game_fighter/constants.py` | Shared tuning values ([docs](docs/constants.md)). |
+| `assets/` | Art, UI, stages, fonts. |
+| `ryu_frames.json`, `ken_frames.json` | Frame metadata for slicing. |
+| `docs/` | Module docs + build guide (`buildozer.md`). |
+| `docs/gamescreenshot.png` | README screenshot. |
+| `CONTROLS.txt` | Quick control reference. |
+| `buildozer.spec` | Android build configuration ([docs](docs/buildozer.md)). |
+| `tools/` | Helper scripts (`slice_sprites.py`, `atlas_inspect.py`). |
+| `Individual_Game_Documentation.md` | Design/implementation notes. |
+| `Game Showcase.mp4` | Sample gameplay video. |
+| `.vscode/settings.json` | Editor settings. |
+| `.gitignore` | Git ignores. |
+| `_tmp/` | Scratch (ignored). |
+
 ## Quick start (desktop)
 1. (Optional) create and activate a virtual environment.
 2. Install deps:
@@ -31,11 +58,11 @@ An arcade-style 2D fighter built with Kivy. You get character/stage select, spri
 ## What’s inside
 - `game_fighter/` gameplay package:
   - `fighter_game.py` entrypoint ([docs](docs/fighter_game.md)); `fighter_app.py` Kivy app bootstrap (uses native window size) ([docs](docs/fighter_app.md)); `game_widget.py` core game loop, menus, input (keyboard/controller/touch), camera, HUD, AI ([docs](docs/game_widget.md)); `fighter.py` fighter model and collisions ([docs](docs/fighter.md)); `sprite_anim.py` animation helper ([docs](docs/sprite_anim.md)); `input_manager.py` multi-source input aggregator ([docs](docs/input_manager.md)); `constants.py` shared tuning values ([docs](docs/constants.md)).
-- `assets/` art, UI, fonts, and stage layers.
-- `docs/` detailed module notes (see links above) plus `buildozer.md` for packaging.
-- `CONTROLS.txt` quick control reference.
-- `buildozer.spec` + `docs/buildozer.md` for Android packaging.
-- `tools/` helper scripts; `Game Showcase.mp4` sample footage; `Individual_Game_Documentation.md` design notes.
+  - `assets/` art, UI, fonts, and stage layers.
+  - `docs/` detailed module notes (see links above) plus `buildozer.md` for packaging.
+  - `CONTROLS.txt` quick control reference.
+  - `buildozer.spec` + `docs/buildozer.md` for Android packaging.
+  - `tools/` helper scripts; `Game Showcase.mp4` sample footage; `Individual_Game_Documentation.md` design notes.
 
 ## Building for Android
 See `docs/buildozer.md` for spec details, WSL/venv setup, required system packages, and `buildozer` commands.
