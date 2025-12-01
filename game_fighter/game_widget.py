@@ -2,6 +2,7 @@ import os
 import random
 import math
 
+from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
 from kivy.core.text import Label as CoreLabel
@@ -96,6 +97,7 @@ class FighterGame(Widget):
         self.touch_button_boxes = {}
         self._main_menu_play_rect = None
         self._main_menu_control_rect = None
+        self._main_menu_home_rect = None
         self._win_button_rects = {}
         self.win_menu_index = 0
         self.transition_lock = False
@@ -1187,8 +1189,9 @@ class FighterGame(Widget):
             btn_y = min(btn_y, logo_rect.pos[1] - btn_h - gap)
         btn_y = max(btn_y, self.height * 0.2)
 
-        self.main_menu_index = min(1, getattr(self, "main_menu_index", 0))
+        self.main_menu_index = min(2, getattr(self, "main_menu_index", 0))
         self._main_menu_control_rect = None
+        self._main_menu_home_rect = None
 
         # Play button
         self.ui_group.add(Color(0.85, 0.35, 0.25, 1))
@@ -1211,7 +1214,18 @@ class FighterGame(Widget):
         opt_tex = self._measure_label("Options", 64)
         self._draw_label("Options", btn_x + (btn_w - opt_tex.width) / 2, opt_y + (btn_h - opt_tex.height) / 2, font_px=64)
 
-        prompt_y = opt_y - max(self.height * 0.05, 42)
+        # Home/Menu button
+        home_y = opt_y - (btn_h + gap)
+        self.ui_group.add(Color(0.85, 0.35, 0.25, 1))
+        self.ui_group.add(Rectangle(pos=(btn_x, home_y), size=(btn_w, btn_h)))
+        if self.main_menu_index == 2:
+            self.ui_group.add(Color(1, 1, 1, 1))
+            self.ui_group.add(Line(rectangle=(btn_x, home_y, btn_w, btn_h), width=4))
+        self._main_menu_home_rect = (btn_x, home_y, btn_w, btn_h)
+        home_tex = self._measure_label("Home Menu", 64)
+        self._draw_label("Home Menu", btn_x + (btn_w - home_tex.width) / 2, home_y + (btn_h - home_tex.height) / 2, font_px=64)
+
+        prompt_y = home_y - max(self.height * 0.05, 42)
         prompt_y = max(prompt_y, self.height * 0.05)
         self._center_label("Use Up/Down to select; Enter or tap to confirm", prompt_y, font_px=38, color=(1, 1, 1, 0.8))
 
@@ -1536,6 +1550,12 @@ class FighterGame(Widget):
                     self.main_menu_index = 1
                     self._enter_options()
                     return True
+            if self._main_menu_home_rect:
+                hx, hy, hw, hh = self._main_menu_home_rect
+                if hx <= x <= hx + hw and hy <= y <= hy + hh:
+                    self.main_menu_index = 2
+                    self._return_to_launcher()
+                    return True
             # tap elsewhere still starts
             self.transition_lock = True
             self._play_sfx_and_then("gamestart", lambda: self._enter_character_select())
@@ -1615,6 +1635,19 @@ class FighterGame(Widget):
     # --------------------------------------------------------
     # INPUT HANDLING (P1 ONLY)
     # --------------------------------------------------------
+    def _return_to_launcher(self):
+        """Go back to the top-level game selector."""
+        self._stop_music()
+        self.state = "main_menu"
+        try:
+            app = App.get_running_app()
+            if hasattr(app, "return_to_menu"):
+                app.return_to_menu()
+        except Exception:
+            pass
+        finally:
+            self.transition_lock = False
+
     def _action_from_keyname(self, name):
         if name in ("enter", "space", "r"):
             return "confirm"
@@ -1641,9 +1674,11 @@ class FighterGame(Widget):
                     self._play_sfx_and_then("gamestart", lambda: self._enter_character_select())
                 elif self.main_menu_index == 1:
                     self._play_sfx_and_then("optionconfirm", lambda: self._enter_options())
+                elif self.main_menu_index == 2:
+                    self._play_sfx_and_then("optionconfirm", lambda: self._return_to_launcher())
                 return True
             if action == "down":
-                self.main_menu_index = min(1, self.main_menu_index + 1)
+                self.main_menu_index = min(2, self.main_menu_index + 1)
                 self._render_main_menu()
                 self._play_sfx("optionscroll")
                 return True
