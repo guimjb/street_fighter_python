@@ -30,9 +30,9 @@ An arcade-style 2D fighter built with Kivy. You get character/stage select, spri
 
 ## What’s inside
 - `game_fighter/` gameplay package:
-  - `fighter_game.py` entrypoint; `fighter_app.py` Kivy app bootstrap (uses native window size); `game_widget.py` core game loop, menus, input (keyboard/controller/touch), camera, HUD, AI; `fighter.py` fighter model and collisions; `sprite_anim.py` animation helper; `input_manager.py` multi-source input aggregator; `constants.py` shared tuning values.
+  - `fighter_game.py` entrypoint ([docs](docs/fighter_game.md)); `fighter_app.py` Kivy app bootstrap (uses native window size) ([docs](docs/fighter_app.md)); `game_widget.py` core game loop, menus, input (keyboard/controller/touch), camera, HUD, AI ([docs](docs/game_widget.md)); `fighter.py` fighter model and collisions ([docs](docs/fighter.md)); `sprite_anim.py` animation helper ([docs](docs/sprite_anim.md)); `input_manager.py` multi-source input aggregator ([docs](docs/input_manager.md)); `constants.py` shared tuning values ([docs](docs/constants.md)).
 - `assets/` art, UI, fonts, and stage layers.
-- `docs/` detailed module notes: `fighter_game.md`, `fighter_app.md`, `game_widget.md`, `fighter.md`, `sprite_anim.md`, `input_manager.md`, `constants.md`, `buildozer.md`.
+- `docs/` detailed module notes (see links above) plus `buildozer.md` for packaging.
 - `CONTROLS.txt` quick control reference.
 - `buildozer.spec` + `docs/buildozer.md` for Android packaging.
 - `tools/` helper scripts; `Game Showcase.mp4` sample footage; `Individual_Game_Documentation.md` design notes.
