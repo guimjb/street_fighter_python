@@ -49,7 +49,14 @@ class GameSelectorApp(App):
         Window.clearcolor = (0.03, 0.03, 0.05, 1)
         self.screen_manager = ScreenManager(transition=FadeTransition(duration=0.2))
         self.screen_manager.add_widget(MenuScreen(on_select=self.launch_game))
+        # Explicitly start on the menu so mobile builds don't jump straight into a game.
+        self.screen_manager.current = "menu"
         return self.screen_manager
+
+    def on_start(self):
+        # Extra guard in case platform defaults ever bypass the initial screen choice.
+        if self.screen_manager:
+            self.screen_manager.current = "menu"
 
     def launch_game(self, game_key, *_):
         if game_key == "jetpack":

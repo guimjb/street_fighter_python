@@ -1180,14 +1180,16 @@ class FighterGame(Widget):
                 shift = cur_top - max_top
                 logo_rect.pos = (logo_rect.pos[0], logo_rect.pos[1] - shift)
 
-        btn_w = min(self.width * 0.32, 520)
-        btn_h = 120
-        gap = max(self.height * 0.04, 36)
-        btn_x = (self.width - btn_w) / 2
-        btn_y = self.height * 0.42
+        btn_w = min(self.width * 0.28, 420)
+        btn_h = min(self.height * 0.14, 120)
+        gap_x = max(self.width * 0.03, 28)
+        gap_y = max(self.height * 0.03, 26)
+        row_y = self.height * 0.42
         if logo_rect:
-            btn_y = min(btn_y, logo_rect.pos[1] - btn_h - gap)
-        btn_y = max(btn_y, self.height * 0.2)
+            row_y = min(row_y, logo_rect.pos[1] - btn_h - gap_y)
+        row_y = max(row_y, self.height * 0.22)
+        total_row_w = btn_w * 2 + gap_x
+        start_x = (self.width - total_row_w) / 2
 
         self.main_menu_index = min(2, getattr(self, "main_menu_index", 0))
         self._main_menu_control_rect = None
@@ -1195,39 +1197,40 @@ class FighterGame(Widget):
 
         # Play button
         self.ui_group.add(Color(0.85, 0.35, 0.25, 1))
-        self.ui_group.add(Rectangle(pos=(btn_x, btn_y), size=(btn_w, btn_h)))
+        self.ui_group.add(Rectangle(pos=(start_x, row_y), size=(btn_w, btn_h)))
         if self.main_menu_index == 0:
             self.ui_group.add(Color(1, 1, 1, 1))
-            self.ui_group.add(Line(rectangle=(btn_x, btn_y, btn_w, btn_h), width=4))
-        self._main_menu_play_rect = (btn_x, btn_y, btn_w, btn_h)
+            self.ui_group.add(Line(rectangle=(start_x, row_y, btn_w, btn_h), width=4))
+        self._main_menu_play_rect = (start_x, row_y, btn_w, btn_h)
         play_tex = self._measure_label("Play", 64)
-        self._draw_label("Play", btn_x + (btn_w - play_tex.width) / 2, btn_y + (btn_h - play_tex.height) / 2, font_px=64)
+        self._draw_label("Play", start_x + (btn_w - play_tex.width) / 2, row_y + (btn_h - play_tex.height) / 2, font_px=64)
 
-        # Options button (same size)
-        opt_y = btn_y - (btn_h + gap)
+        # Options button (same row, to the right)
+        opt_x = start_x + btn_w + gap_x
         self.ui_group.add(Color(0.85, 0.35, 0.25, 1))
-        self.ui_group.add(Rectangle(pos=(btn_x, opt_y), size=(btn_w, btn_h)))
+        self.ui_group.add(Rectangle(pos=(opt_x, row_y), size=(btn_w, btn_h)))
         if self.main_menu_index == 1:
             self.ui_group.add(Color(1, 1, 1, 1))
-            self.ui_group.add(Line(rectangle=(btn_x, opt_y, btn_w, btn_h), width=4))
-        self._main_menu_options_rect = (btn_x, opt_y, btn_w, btn_h)
+            self.ui_group.add(Line(rectangle=(opt_x, row_y, btn_w, btn_h), width=4))
+        self._main_menu_options_rect = (opt_x, row_y, btn_w, btn_h)
         opt_tex = self._measure_label("Options", 64)
-        self._draw_label("Options", btn_x + (btn_w - opt_tex.width) / 2, opt_y + (btn_h - opt_tex.height) / 2, font_px=64)
+        self._draw_label("Options", opt_x + (btn_w - opt_tex.width) / 2, row_y + (btn_h - opt_tex.height) / 2, font_px=64)
 
-        # Home/Menu button
-        home_y = opt_y - (btn_h + gap)
+        # Home/Menu button (second row, centered)
+        home_y = row_y - (btn_h + gap_y)
+        home_x = (self.width - btn_w) / 2
         self.ui_group.add(Color(0.85, 0.35, 0.25, 1))
-        self.ui_group.add(Rectangle(pos=(btn_x, home_y), size=(btn_w, btn_h)))
+        self.ui_group.add(Rectangle(pos=(home_x, home_y), size=(btn_w, btn_h)))
         if self.main_menu_index == 2:
             self.ui_group.add(Color(1, 1, 1, 1))
-            self.ui_group.add(Line(rectangle=(btn_x, home_y, btn_w, btn_h), width=4))
-        self._main_menu_home_rect = (btn_x, home_y, btn_w, btn_h)
+            self.ui_group.add(Line(rectangle=(home_x, home_y, btn_w, btn_h), width=4))
+        self._main_menu_home_rect = (home_x, home_y, btn_w, btn_h)
         home_tex = self._measure_label("Home Menu", 64)
-        self._draw_label("Home Menu", btn_x + (btn_w - home_tex.width) / 2, home_y + (btn_h - home_tex.height) / 2, font_px=64)
+        self._draw_label("Home Menu", home_x + (btn_w - home_tex.width) / 2, home_y + (btn_h - home_tex.height) / 2, font_px=64)
 
         prompt_y = home_y - max(self.height * 0.05, 42)
         prompt_y = max(prompt_y, self.height * 0.05)
-        self._center_label("Use Up/Down to select; Enter or tap to confirm", prompt_y, font_px=38, color=(1, 1, 1, 0.8))
+        self._center_label("Use arrows to select; Enter or tap to confirm", prompt_y, font_px=38, color=(1, 1, 1, 0.8))
 
     def _render_select_grid(self, title, options, selected_idx):
         self._clear_ui()
