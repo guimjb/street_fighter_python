@@ -59,8 +59,8 @@ This documents every parameter currently set in `buildozer.spec` and how to buil
    - First run downloads the Android SDK/NDK/gradle into `~/.buildozer`.
 
 7) **APK to Phone**
-    - Send the APK file to your desired android device and excute it.
-    - Use adb for debugging the APK on the phone 
+    - Send the APK file to your Android device and install/run it.
+    - Use adb for debugging the APK on the phone.
 
 Notes:
 - Keep `arm64-v8a` for 64-bit compliance.

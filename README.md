@@ -28,7 +28,6 @@ An arcade-style 2D fighter built with Kivy. You get character/stage select, spri
 | `buildozer.spec` | Android build configuration ([docs](docs/buildozer.md)). |
 | `tools/` | Helper scripts (`slice_sprites.py`, `atlas_inspect.py`). |
 | `Individual_Game_Documentation.md` | Design/implementation notes. |
-| `Game Showcase.mp4` | Sample gameplay video. |
 | `.vscode/settings.json` | Editor settings. |
 | `.gitignore` | Git ignores. |
 | `_tmp/` | Scratch (ignored). |
@@ -52,7 +51,7 @@ An arcade-style 2D fighter built with Kivy. You get character/stage select, spri
 - Character/Stage select: A/Left/Up and D/Right/Down (or tap) to choose; Enter/Space/tap to confirm.
 - In match (keyboard): A/Left move, D/Right move, W/Up jump, J/Space attack, R restarts after match.
 - In match (controller): Stick/D-pad to move; Up or A/Y jump; B/X attack; Start/Options confirms menus.
-- In match (touch): On-screen D-pad (left) for movement/jump; right-side buttons for Punch (P), Kick (placeholder), Special (placeholder); tap match-over banner to restart.
+- In match (touch): On-screen D-pad (left) for movement/jump; right-side Punch button (Kick/Special not implemented); tap match-over banner to restart.
 - After match: R/Enter/Space restart; M/Esc/Backspace return to main menu.
 
 ## What’s inside
@@ -62,7 +61,7 @@ An arcade-style 2D fighter built with Kivy. You get character/stage select, spri
   - `docs/` detailed module notes (see links above) plus `buildozer.md` for packaging.
   - `CONTROLS.txt` quick control reference.
   - `buildozer.spec` + `docs/buildozer.md` for Android packaging.
-  - `tools/` helper scripts; `Game Showcase.mp4` sample footage; `Individual_Game_Documentation.md` design notes.
+  - `tools/` helper scripts; `Individual_Game_Documentation.md` design notes.
   - Narrator VO for round/fight/perfect/win/lose stored in `assets/projectsounds/narrator/`; round intros/fight overlay timing follows those audio lengths.
   - HUD uses a shared health bar: P1 depletes left→center, P2 right→center, still showing both names/pips.
 
